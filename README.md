@@ -4,9 +4,11 @@
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-1.1.0-blue?style=flat-square)]()
 
-🌐 English | [한국어](README.ko.md)
+🌐 English | [한국어](README.ko.md) · 🔗 **[Project Page](https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/)** · ⬇️ **[Download](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)**
 
 **Vertex Animation Texture Encoder for Maya** - Convert skinned meshes, deformers, and anything that moves into VAT!
+
+A free, open-source **Maya VAT baker** — bake skeletal (skinCluster), blend shape, and deformer animation into **vertex animation textures** directly inside Autodesk Maya, **no Houdini required**. Outputs a position texture, optional normal texture, bounds JSON and a proxy FBX that you can play back with a vertex shader in real-time engines (Unreal Engine, Unity, PlayCanvas, three.js / WebGL) — ideal for crowds and large numbers of animated instances.
 
 ![Demo](https://github.com/user-attachments/assets/e7b50f13-9a43-4ebe-9f14-aee65729311b)
 <sub>*Astro Bot*™ © Sony Interactive Entertainment. Unofficial fan remake.</sub>
@@ -31,7 +33,9 @@ maya_vat.show()
 
 ### Installation
 
-1. Copy the `maya_vat` folder to your Maya scripts path
+1. Download the [latest release](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest) (or *Code > Download ZIP*) and extract it.
+2. **Rename** the extracted folder (e.g. `Maya-Vertex-Animation-Texture-Baker-main`) to **`maya_vat`** — the folder name is the Python package name.
+3. Copy the `maya_vat` folder to your Maya scripts path
 ```
    # Windows
    C:/Users/<username>/Documents/maya/<version>/scripts/
@@ -43,7 +47,7 @@ maya_vat.show()
    ~/maya/<version>/scripts/
 ```
 
-2. Restart Maya or run the code above in Script Editor
+4. Restart Maya or run the code above in Script Editor
 
 ### Output File Structure
 ```

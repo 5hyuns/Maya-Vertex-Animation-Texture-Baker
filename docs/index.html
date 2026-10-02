@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maya VAT Encoder – Free Vertex Animation Texture Baker for Autodesk Maya</title>
+<meta name="description" content="Free, open-source Maya VAT baker. Bake skinned mesh, blend shape and deformer animation into vertex animation textures (VAT) inside Autodesk Maya – no Houdini required. Outputs PNG + JSON + FBX for Unreal, Unity, PlayCanvas and WebGL.">
+<meta name="keywords" content="Maya VAT, vertex animation texture, Maya vertex animation texture, VAT baker, VAT exporter, Maya to Unreal VAT, Maya to Unity VAT, crowd animation, technical art, Maya Python tool, 버텍스 애니메이션 텍스처, 마야 VAT">
+<meta name="author" content="5hyuns">
+<link rel="canonical" href="https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Maya VAT Encoder – Vertex Animation Texture Baker for Maya">
+<meta property="og:description" content="Bake skinned mesh & deformer animation into vertex animation textures inside Maya. No Houdini required. Free & MIT.">
+<meta property="og:url" content="https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/">
+<meta property="og:image" content="https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/assets/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Maya VAT Encoder – Vertex Animation Texture Baker for Maya">
+<meta name="twitter:description" content="Bake skinned mesh & deformer animation into VAT inside Maya. No Houdini required.">
+<meta name="twitter:image" content="https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/assets/social-preview.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Maya VAT Encoder",
+  "alternateName": "Maya Vertex Animation Texture Baker",
+  "applicationCategory": "DesignApplication",
+  "operatingSystem": "Windows, macOS, Linux (Autodesk Maya 2022+)",
+  "softwareVersion": "1.1.0",
+  "license": "https://opensource.org/licenses/MIT",
+  "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+  "description": "Bake skeletal, blend shape and deformer animation into vertex animation textures (VAT) inside Autodesk Maya.",
+  "downloadUrl": "https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest",
+  "codeRepository": "https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker",
+  "image": "https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/assets/social-preview.png",
+  "author": {"@type": "Person", "name": "5hyuns", "url": "https://github.com/5hyuns"}
+}
+</script>
+
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --fg:#e6edf3; --muted:#8b949e; --accent:#00b4ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; }
+  a { color:var(--accent); }
+  .wrap { max-width:960px; margin:0 auto; padding:0 24px; }
+  header { padding:72px 0 40px; text-align:center; }
+  h1 { font-size:clamp(2rem,5vw,3.2rem); margin:0 0 12px; line-height:1.15; }
+  .lead { color:var(--muted); font-size:1.2rem; max-width:720px; margin:0 auto 28px; }
+  .btns { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .btn { display:inline-block; padding:12px 22px; border-radius:8px; text-decoration:none; font-weight:600; border:1px solid var(--border); color:var(--fg); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#001018; }
+  .hero { width:100%; border-radius:12px; border:1px solid var(--border); margin-top:40px; display:block; }
+  .credit { color:var(--muted); font-size:.8rem; text-align:center; margin-top:6px; }
+  section { padding:40px 0; border-top:1px solid var(--border); }
+  h2 { font-size:1.6rem; margin:0 0 18px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 20px; }
+  .card h3 { margin:0 0 6px; font-size:1.05rem; }
+  .card p { margin:0; color:var(--muted); font-size:.95rem; }
+  pre { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:16px; overflow-x:auto; font-size:.88rem; line-height:1.5; }
+  code { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--card); }
+  img.shot { max-width:100%; border-radius:8px; border:1px solid var(--border); }
+  details { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px 16px; margin-bottom:10px; }
+  summary { cursor:pointer; font-weight:600; }
+  footer { padding:40px 0 60px; color:var(--muted); text-align:center; border-top:1px solid var(--border); }
+</style>
+</head>
+<body>
+<header class="wrap">
+  <h1>Maya VAT Encoder</h1>
+  <p class="lead">A free, open-source <strong>vertex animation texture (VAT) baker for Autodesk Maya</strong>. Turn skinned meshes, blend shapes and deformers into textures you can play back on the GPU. No Houdini required.</p>
+  <div class="btns">
+    <a class="btn primary" href="https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest">⬇ Download</a>
+    <a class="btn" href="https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker">★ View on GitHub</a>
+    <a class="btn" href="https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/blob/main/README.ko.md">한국어</a>
+  </div>
+  <img class="hero" src="assets/demo.gif" alt="Hundreds of characters animated with vertex animation textures baked in Maya" width="800" height="450" loading="eager">
+  <p class="credit"><em>Astro Bot</em>™ © Sony Interactive Entertainment. Unofficial fan remake.</p>
+</header>
+
+<main class="wrap">
+  <section>
+    <h2>Why VAT?</h2>
+    <p>Vertex animation textures store per-vertex positions for every frame in an image. A simple vertex shader reads them back, so you can render <strong>thousands of animated instances</strong> (crowds, foliage, destruction, cloth, FX) without skeletal skinning cost. Most VAT tools live in Houdini. This one runs <strong>entirely inside Maya</strong>, in pure Python.</p>
+  </section>
+
+  <section>
+    <h2>Features</h2>
+    <div class="grid">
+      <div class="card"><h3>Anything that moves</h3><p>skinCluster, blend shapes, lattices, nonlinear deformers. If it deforms the mesh, it bakes.</p></div>
+      <div class="card"><h3>Zero dependencies</h3><p>Pure Python + Maya API. Writes PNGs without PIL/numpy. Maya 2022+ with PySide2/PySide6.</p></div>
+      <div class="card"><h3>Object or World space</h3><p>Object space keeps runtime movement and rotation working. World space suits static props.</p></div>
+      <div class="card"><h3>Auto VAT UVs</h3><p>Generates a dedicated UV set that maps each vertex to its texture column.</p></div>
+      <div class="card"><h3>Skip first frame</h3><p>Use a T-pose or bind pose as the reference mesh without baking it into the animation.</p></div>
+      <div class="card"><h3>One-click export</h3><p>Position PNG, optional normal PNG, bounds JSON and a skin-free proxy FBX.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Install &amp; Run</h2>
+    <ol>
+      <li>Download the <a href="https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest">latest release</a> and extract it.</li>
+      <li>Rename the folder to <code>maya_vat</code> and copy it to <code>Documents/maya/&lt;version&gt;/scripts/</code>.</li>
+      <li>In Maya's Script Editor (Python):</li>
+    </ol>
+<pre><code>import maya_vat
+maya_vat.show()</code></pre>
+    <img class="shot" src="assets/ui.png" alt="Maya VAT Encoder user interface inside Autodesk Maya" loading="lazy" width="1323" height="823">
+  </section>
+
+  <section>
+    <h2>Output</h2>
+<pre><code>mesh_vat/
+  mesh_vat.png      # position deltas (width = vertices, height = frames)
+  mesh_vnrm.png     # normals (optional)
+  mesh_remap.json   # bounds min/max for decoding
+  mesh.fbx          # proxy mesh, first frame, VAT_UV set</code></pre>
+    <p>Each pixel stores <code>(ΔX, ΔY, ΔZ)</code> relative to the proxy mesh, normalized to 0–255 using the min/max in the JSON. To decode in a vertex shader:</p>
+<pre><code>// uv  = VAT_UV (u = vertex column), v offset by current frame
+// rgb = texture sample (0..1), point filtering, no sRGB, no mips
+float3 delta = lerp(boundsMin, boundsMax, rgb);
+position    = proxyPosition + delta;</code></pre>
+  </section>
+
+  <section>
+    <h2>Engine support</h2>
+    <table>
+      <tr><th>Engine</th><th>How</th></tr>
+      <tr><td>Unreal Engine</td><td>Material World Position Offset reading the VAT texture (point sampling, no compression/sRGB)</td></tr>
+      <tr><td>Unity</td><td>Shader Graph / HLSL vertex stage, sample with <code>tex2Dlod</code></td></tr>
+      <tr><td>PlayCanvas / three.js / WebGL</td><td>Custom vertex shader chunk. Normal X is pre-flipped for PlayCanvas.</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>FAQ</h2>
+    <details><summary>Do I need Houdini?</summary><p>No. Everything is baked inside Maya.</p></details>
+    <details><summary>Object space or world space?</summary><p>Use Object space for characters that move or rotate at runtime, including root-motion clips. World space is only for objects with a fixed transform.</p></details>
+    <details><summary>Is it free for commercial use?</summary><p>Yes, it's MIT licensed.</p></details>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p>Maya VAT Encoder · MIT License · by <a href="https://github.com/5hyuns">5hyuns</a> · <a href="mailto:555hyuns@gmail.com">555hyuns@gmail.com</a></p>
+</footer>
+</body>
+</html>

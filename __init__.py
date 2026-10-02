@@ -5,8 +5,8 @@ Maya VAT - Vertex Animation Texture Encoder
 A Maya tool for encoding vertex animation textures for real-time engines.
 
 Usage:
-    import maya_openvat
-    maya_openvat.show()
+    import maya_vat
+    maya_vat.show()
 
 Author: 555hyuns@gmail.com
 Version: 1.1.0

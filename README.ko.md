@@ -6,6 +6,10 @@
 
 **Maya용 Vertex Animation Texture 인코더** - 스킨메시, 디포머 등 움직이는 모든 것을 VAT로 변환해보세요!
 
+🔗 **[프로젝트 페이지](https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/)** · ⬇️ **[다운로드](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)**
+
+**Houdini 없이 Maya 안에서** 스켈레탈(skinCluster)·블렌드쉐입·디포머 애니메이션을 **버텍스 애니메이션 텍스처(VAT)** 로 굽는 무료 오픈소스 툴입니다. Position/Normal 텍스처, 바운드 JSON, 프록시 FBX를 출력하며, 버텍스 셰이더로 언리얼 엔진·유니티·PlayCanvas·three.js(WebGL) 등에서 재생할 수 있습니다. 군중(crowd)이나 대량 인스턴스 애니메이션에 적합합니다.
+
 ![Demo](https://github.com/user-attachments/assets/e7b50f13-9a43-4ebe-9f14-aee65729311b)
 <sub>*Astro Bot*™ © Sony Interactive Entertainment. Unofficial fan remake.</sub>
 
@@ -30,7 +34,9 @@ maya_vat.show()
 
 ### 설치
 
-1. `maya_vat` 폴더를 Maya 스크립트 경로에 복사
+1. [최신 릴리스](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)(또는 *Code > Download ZIP*)를 받아 압축 해제
+2. 압축 푼 폴더(예: `Maya-Vertex-Animation-Texture-Baker-main`)의 이름을 **`maya_vat`** 으로 변경 (폴더 이름이 곧 파이썬 패키지 이름)
+3. `maya_vat` 폴더를 Maya 스크립트 경로에 복사
    ```
    # Windows
    C:/Users/<사용자>/Documents/maya/<버전>/scripts/
@@ -42,7 +48,7 @@ maya_vat.show()
    ~/maya/<버전>/scripts/
    ```
 
-2. Maya 재시작 또는 Script Editor에서 위 코드 실행
+4. Maya 재시작 또는 Script Editor에서 위 코드 실행
 
 ### 출력 파일 구조
 

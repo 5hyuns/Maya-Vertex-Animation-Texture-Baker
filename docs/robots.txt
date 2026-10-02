@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/sitemap.xml
