@@ -83,6 +83,21 @@ class OpenVATWindow(QtWidgets.QDialog):
 
         # Options
         self.options_group = QtWidgets.QGroupBox("Options")
+
+        # Target engine
+        self.engine_label = QtWidgets.QLabel("Target Engine:")
+        self.engine_combo = QtWidgets.QComboBox()
+        self.engine_combo.addItem("PlayCanvas / WebGL", "playcanvas")
+        self.engine_combo.addItem("Unreal Engine", "unreal")
+        self.engine_combo.addItem("Unity", "unity")
+        self.engine_combo.setCurrentIndex(0)
+        self.engine_combo.setToolTip(
+            "Stores offsets and normals in the axes and units of the\n"
+            "engine's FBX import, so the shader needs no axis swap.\n"
+            "PlayCanvas: Maya axes (Y-up), normal X negated\n"
+            "Unreal: Z-up, centimeters\n"
+            "Unity: Y-up left-handed, meters"
+        )
         self.normals_check = QtWidgets.QCheckBox("Export Normals (separate texture)")
         self.export_mesh_check = QtWidgets.QCheckBox("Export Mesh (FBX)")
         self.export_mesh_check.setChecked(True)
@@ -162,6 +177,12 @@ class OpenVATWindow(QtWidgets.QDialog):
 
         # Options layout
         options_layout = QtWidgets.QVBoxLayout()
+
+        engine_layout = QtWidgets.QHBoxLayout()
+        engine_layout.addWidget(self.engine_label)
+        engine_layout.addWidget(self.engine_combo)
+        options_layout.addLayout(engine_layout)
+
         options_layout.addWidget(self.normals_check)
         options_layout.addWidget(self.export_mesh_check)
 
@@ -308,7 +329,14 @@ class OpenVATWindow(QtWidgets.QDialog):
         num_frames = self.frame_end.value() - self.frame_start.value() + 1
 
         try:
-            result = utils.create_vat_uv(mesh_name, num_verts, num_frames, uv_set_name, force)
+            # Build the UV at the proxy pose (first frame), the pose the FBX
+            # is exported at; on animated deformers UV edits hold only there
+            original_frame = utils.get_current_frame()
+            utils.set_current_frame(self.frame_start.value())
+            try:
+                result = utils.create_vat_uv(mesh_name, num_verts, num_frames, uv_set_name, force)
+            finally:
+                utils.set_current_frame(original_frame)
 
             if result.get('skipped'):
                 self.uv_status_label.setText(
@@ -354,6 +382,7 @@ class OpenVATWindow(QtWidgets.QDialog):
         uv_set_name = self.uv_set_line.text().strip() or "VAT_UV"
         force_uv = self.uv_force_check.isChecked()
         skip_first_frame = self.skip_first_check.isChecked()
+        target_engine = self.engine_combo.currentData()
 
         self.encode_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
@@ -370,7 +399,8 @@ class OpenVATWindow(QtWidgets.QDialog):
                 use_world_space=use_world_space,
                 uv_set_name=uv_set_name,
                 force_uv=force_uv,
-                skip_first_frame=skip_first_frame
+                skip_first_frame=skip_first_frame,
+                target_engine=target_engine
             )
 
             if result["success"]:
@@ -393,12 +423,14 @@ class OpenVATWindow(QtWidgets.QDialog):
                     "Success",
                     "VAT encoding complete!\n\n"
                     "Texture: {} x {}\n"
+                    "Target Engine: {}\n"
                     "Space: {}\n"
                     "Skip First Frame: {}\n"
                     "UV Set: {} ({})\n"
                     "Output: {}".format(
                         result["width"],
                         result["height"],
+                        self.engine_combo.currentText(),
                         space_str,
                         skip_str,
                         uv_set_name,

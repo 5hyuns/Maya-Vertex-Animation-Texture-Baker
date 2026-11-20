@@ -2,7 +2,7 @@
 [![Maya](https://img.shields.io/badge/Maya-2022+-00B4FF?style=flat-square&logo=autodesk)](https://www.autodesk.com/products/maya)
 [![Python](https://img.shields.io/badge/Python-Pure-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.1.0-blue?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-1.2.0-blue?style=flat-square)]()
 
 🌐 English | [한국어](README.ko.md) · 🔗 **[Project Page](https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/)** · ⬇️ **[Download](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)**
 
@@ -31,6 +31,7 @@ A free, open-source **Maya VAT baker** — bake skeletal (skinCluster), blend sh
 ## Features
 
 - **Zero Dependencies** - Pure Python, no additional installation required
+- **Target Engine** - Bake for PlayCanvas / WebGL, Unreal Engine or Unity axes and units
 - **Object/World Space** - Choose coordinate space for your needs
 - **Auto VAT UV Generation** - Automatic UV assignment based on vertex ID
 - **Skip First Frame** - Option to exclude T-Pose
@@ -67,7 +68,7 @@ maya_vat.show()
 ```
 
 1. Select the animated mesh and click `<<` next to **Target Mesh**.
-2. Set the **Frame Range** (`Timeline` fills it from the timeline), **Coordinate Space** and options.
+2. Set the **Frame Range** (`Timeline` fills it from the timeline), **Target Engine**, **Coordinate Space** and options.
 3. Choose an **Output Directory** and click **Encode VAT**.
 
 ---
@@ -75,6 +76,23 @@ maya_vat.show()
 ## Options
 
 ![UI](https://github.com/user-attachments/assets/dd124ec8-42ee-4941-a186-06b7c061b25c)
+
+### Target Engine
+
+Each engine's FBX importer converts the proxy mesh to its own axes and units. The selected target stores the offsets and normals in those same axes and units, so the shader adds the decoded offset to the imported vertex position as is.
+
+| Target | Axes / units of the stored data | Normal |
+|--------|---------------------------------|--------|
+| **PlayCanvas / WebGL** (default) | Maya axes (Y-up), centimeters | X negated |
+| **Unreal Engine** | Z-up, left-handed, centimeters: `(x, y, z)` → `(x, z, y)` (`(x, -y, z)` for a Z-up Maya scene) | Same mapping as positions |
+| **Unity** | Y-up, left-handed, meters: `(x, y, z)` → `(-x, y, z) × 0.01` | Same mapping as positions |
+
+- Unreal and Unity targets write the FBX in centimeters, whatever the Maya working unit is.
+- The PlayCanvas target expects the mesh to keep the FBX mesh axes when it becomes a GLB. Blender's glTF export with **+Y Up** (its default) rewrites the vertex data as `(x, z, -y)`, so the offsets and normals no longer line up with the mesh.
+- The Unreal mapping assumes the FBX import options **Convert Scene = on** and **Force Front XAxis = off** (both defaults).
+- Unreal bakes the object's transform into the static mesh vertices on import. With **Object** space, the Unreal target applies the object's rotation and scale at the first frame to the offsets and normals so they match the imported mesh.
+- The Unity mapping assumes **Convert Units = on** (default). Unity keeps the object transform (and the up-axis rotation of a Z-up scene) on the GameObject, so Y-up and Z-up scenes both work.
+- The texture layout, UV and JSON keys are the same for every target. See [Playing VAT in an Engine](#playing-vat-in-an-engine) for the engine setup.
 
 ### Coordinate Space
 
@@ -159,7 +177,7 @@ Pixel RGB = (deltaX, deltaY, deltaZ) normalized to 0-255
 |------|-------|
 | Format | 8-bit RGB PNG |
 | Position | `delta = position(frame) - position(proxy)`, remapped per axis with a single global min/max |
-| Normal | -1..1 → 0..255, **X axis negated** (PlayCanvas compatibility) |
+| Normal | -1..1 → 0..255, in the axes of the [Target Engine](#target-engine) (PlayCanvas: **X axis negated**) |
 | VAT UV | `U = (vertex_id + 0.5) / vertex_count`, `V` = center of the first row |
 | Proxy | Mesh pose at the first frame of the range |
 
@@ -167,6 +185,7 @@ Pixel RGB = (deltaX, deltaY, deltaZ) normalized to 0-255
 
 ```json
 {
+    "target": "unreal",
     "position": {
         "min": [-2.5, -1.0, -0.5],
         "max": [3.2, 4.5, 1.2],
@@ -181,7 +200,7 @@ Pixel RGB = (deltaX, deltaY, deltaZ) normalized to 0-255
 }
 ```
 
-`normal` is present only when normals are exported.
+`target` is the [Target Engine](#target-engine) (`playcanvas`, `unreal` or `unity`). `normal` is present only when normals are exported.
 
 ---
 
@@ -199,7 +218,7 @@ float3 offset = lerp(boundsMin, boundsMax, enc);
 float3 posOS  = proxyPositionOS + offset;
 
 float3 n = tex2Dlod(_VatNormal, float4(uv, 0, 0)).rgb * 2 - 1;
-n.x = -n.x;   // Undo the X flip (skip this if your engine expects the PlayCanvas convention)
+n.x = -n.x;   // PlayCanvas target only: undo the X flip to get Maya axes
 ```
 
 Texture import settings:
@@ -209,6 +228,58 @@ Texture import settings:
 - If your engine loads textures with V flipped, flip V (for example `1 - v`).
 
 8-bit precision is `(max - min) / 255` per axis, so larger motion ranges give coarser steps.
+
+### Unreal Engine
+
+Bake with **Target Engine = Unreal Engine**.
+
+**FBX import (Static Mesh):** keep **Convert Scene** on and **Force Front XAxis** off (the defaults; in the Interchange importer they are under the `...` menu next to the source file).
+
+**Static Mesh editor:**
+
+- **Build Settings > Use Full Precision UVs: on.** Unreal stores UVs as 16-bit floats by default, which cannot address single pixels once the texture is wider than about 1000 vertices. Vertices then read their neighbors' columns and the mesh tears.
+- **Nanite: off.**
+- Raise **Positive / Negative Bounds Extension** (or the component's Bounds Scale) to cover the motion range, otherwise the mesh is culled while it moves.
+
+**Textures (`_vat.png`, `_vnrm.png`):**
+
+| Setting | Value |
+|---------|-------|
+| Compression Settings | `VectorDisplacementmap (RGBA8)` |
+| sRGB | off |
+| Filter | `Nearest` |
+| Mip Gen Settings | `NoMipmaps` |
+
+**Material:** add a **Custom** node with the inputs `VatTex` (Texture Object), `VatUV` (`TexCoord` with the `VAT_UV` index, usually **1**), `Frame`, `Frames`, `BoundsMin`, `BoundsMax`, and the output type `CMOT Float 3`:
+
+```hlsl
+float2 uv  = float2(VatUV.x, (floor(Frame) + 0.5) / Frames);
+float3 enc = Texture2DSampleLevel(VatTex, VatTexSampler, uv, 0).rgb;
+return lerp(BoundsMin, BoundsMax, enc);
+```
+
+- `Frames`, `BoundsMin`, `BoundsMax` come from `remap.json` (`position.frames`, `position.min`, `position.max`). `Frame` can be `fmod(Time * FPS, Frames)`.
+- With an **Object** space bake, connect the result through **TransformVector (Local Space → World Space)** to **World Position Offset**. With a **World** space bake, connect it directly.
+- Normals: decode them in the vertex stage. Use a second Custom node with the same code on `_vnrm.png` and `BoundsMin = -1`, `BoundsMax = 1` (this gives `rgb * 2 - 1`). With an Object space bake, transform the result Local → World. Pass it through a **VertexInterpolator** node, connect the interpolator output to **Normal**, and turn off **Tangent Space Normal** in the material details. Do not sample the normal texture in the pixel stage: `VAT_UV` is interpolated across each triangle there, so the lookup reads neighboring vertices' columns.
+
+### Unity
+
+Bake with **Target Engine = Unity**.
+
+**Model import:** **Convert Units: on**, **Mesh Compression: Off** (both defaults). `VAT_UV` is the second UV channel (`TEXCOORD1` / Shader Graph `UV1`).
+
+**Textures:** sRGB off, **Non-Power of 2: None**, **Generate Mip Maps: off**, **Filter Mode: Point**, **Compression: None**, **Wrap Mode: Clamp**. The default *Non-Power of 2: ToNearest* resizes the texture and breaks the column lookup.
+
+Unity textures have V = 0 at the bottom row, so read the frame row from the top:
+
+```hlsl
+float2 uv     = float2(vatUV.x, 1.0 - (frame + 0.5) / frames);
+float3 enc    = tex2Dlod(_VatPosition, float4(uv, 0, 0)).rgb;
+float3 posOS  = v.vertex.xyz + lerp(_BoundsMin, _BoundsMax, enc);   // object space, meters
+float3 nrmOS  = tex2Dlod(_VatNormal, float4(uv, 0, 0)).rgb * 2 - 1;
+```
+
+With a **World** space bake, the offset is in Unity world axes. Add it after the object-to-world transform instead, for example `posWS = TransformObjectToWorld(v.vertex.xyz) + lerp(_BoundsMin, _BoundsMax, enc)`. Keep the object's transform from the FBX import, because world-space offsets only fit that pose. The normal texture stays in object space with either bake, so always transform `nrmOS` with the object-to-world normal transform.
 
 ---
 
@@ -229,7 +300,8 @@ result = core.encode_vat(
     use_world_space=False,      # Object Space recommended
     uv_set_name="VAT_UV",
     force_uv=False,
-    skip_first_frame=True       # Exclude T-Pose
+    skip_first_frame=True,      # Exclude T-Pose
+    target_engine="unreal"     # "playcanvas" (default), "unreal" or "unity"
 )
 
 # Returns
@@ -293,11 +365,13 @@ maya_vat/
 - Skinning-free (VAT replaces skeletal deformation)
 - Excludes blend shapes
 - Excludes animation (first frame only)
+- Unreal and Unity targets write the file in centimeters
 
 ### Limitations
 
 - The vertex count and order must stay the same for the whole frame range (topology-changing animation is not supported).
-- Texture width equals the vertex count. Check your target engine's maximum texture size for high-poly meshes.
+- Texture width equals the vertex count. Check your target engine's maximum texture size for high-poly meshes. The baker warns when a side exceeds 8192 px.
+- The normal texture stores one normal per vertex, so hard edges render smooth when you use it. To keep a hard edge, split it in Maya before baking (Edit Mesh > Detach), so each side gets its own vertex. The baker warns when the mesh has hard edges.
 
 ---
 

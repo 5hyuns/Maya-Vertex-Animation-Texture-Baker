@@ -35,18 +35,73 @@ def get_vertex_positions(mesh_name, use_world_space=True):
     return [(p.x, p.y, p.z) for p in points]
 
 
-def get_vertex_normals(mesh_name):
-    """Get vertex normals as list of (x, y, z) tuples (in object space)"""
+def get_vertex_normals(mesh_name, use_world_space=False):
+    """
+    Get vertex normals as list of (x, y, z) tuples (object space by default)
+
+    Uses the mesh's shading normals (the face-vertex normals Maya displays and
+    writes to FBX, which follow the mesh's Vertex Normal Method), averaged per
+    vertex, so the texture matches the normals of the exported mesh.
+    """
     mesh_fn = get_mesh_fn(mesh_name)
-    # Use object space so PlayCanvas can properly transform with matrix_normal
-    normals = mesh_fn.getVertexNormals(False, om2.MSpace.kObject)
-    return [(n.x, n.y, n.z) for n in normals]
+    # Object space by default so PlayCanvas can transform with matrix_normal
+    space = om2.MSpace.kWorld if use_world_space else om2.MSpace.kObject
+    normals = mesh_fn.getNormals(space)
+    _, normal_ids = mesh_fn.getNormalIds()
+    _, vertex_ids = mesh_fn.getVertices()
+
+    acc = [[0.0, 0.0, 0.0] for _ in range(mesh_fn.numVertices)]
+    for vtx_id, normal_id in zip(vertex_ids, normal_ids):
+        n = normals[normal_id]
+        a = acc[vtx_id]
+        a[0] += n.x
+        a[1] += n.y
+        a[2] += n.z
+
+    result = []
+    for a in acc:
+        length = (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) ** 0.5
+        if length > 0.0:
+            result.append((a[0] / length, a[1] / length, a[2] / length))
+        else:
+            result.append((0.0, 0.0, 0.0))
+    return result
+
+
+def get_world_matrix(mesh_name):
+    """Get the current world matrix of the mesh transform"""
+    sel = om2.MSelectionList()
+    sel.add(mesh_name)
+    return sel.getDagPath(0).inclusiveMatrix()
+
+
+def transform_vector(v, matrix):
+    """Apply the rotation/scale part of a matrix to an (x, y, z) vector"""
+    r = om2.MVector(v[0], v[1], v[2]) * matrix
+    return (r.x, r.y, r.z)
+
+
+def normal_matrix(matrix):
+    """Matrix that transforms normals for the given transform (inverse transpose)"""
+    return matrix.inverse().transpose()
+
+
+def transform_normal(n, nrm_matrix):
+    """Transform an (x, y, z) normal by a normal_matrix() result, normalized"""
+    r = (om2.MVector(n[0], n[1], n[2]) * nrm_matrix).normal()
+    return (r.x, r.y, r.z)
 
 
 def get_vertex_count(mesh_name):
     """Get number of vertices"""
     mesh_fn = get_mesh_fn(mesh_name)
     return mesh_fn.numVertices
+
+
+def count_hard_edges(mesh_name):
+    """Count edges that are not smoothed (hard edges)"""
+    mesh_fn = get_mesh_fn(mesh_name)
+    return sum(1 for i in range(mesh_fn.numEdges) if not mesh_fn.isEdgeSmooth(i))
 
 
 def get_frame_range():
@@ -89,7 +144,9 @@ def remap_value(value, old_min, old_max, new_min=0, new_max=255):
     if old_max == old_min:
         return new_min
     ratio = (value - old_min) / (old_max - old_min)
-    return int(new_min + ratio * (new_max - new_min))
+    # Round to the nearest step (max error half a step), clamped to the range
+    result = int(new_min + ratio * (new_max - new_min) + 0.5)
+    return max(new_min, min(new_max, result))
 
 
 def write_json(data, filepath):

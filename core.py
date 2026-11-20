@@ -11,9 +11,57 @@ import zlib
 from . import utils
 
 
+# Target engines. Each one stores deltas and normals in the axes and units
+# that the engine's FBX importer gives the proxy mesh, so the decoded offset
+# can be added to the imported vertex position without any swizzle.
+#   playcanvas: Maya axes, Maya internal units (cm); normal X negated
+#   unreal:     Z-up, left-handed, centimeters.
+#               The FBX is written Y-up (a Z-up scene is rotated to Y-up on
+#               export). The importer turns it into Z-up with -Y front, then
+#               negates Y: Y-up scene -> (x, z, y), Z-up scene -> (x, -y, z)
+#               (assumes the default import option Force Front XAxis = off)
+#   unity:      Y-up, left-handed, meters.
+#               The importer negates X and converts units -> (-x, y, z) * 0.01.
+#               It keeps the object transform (and, for a Z-up scene, the
+#               up-axis rotation) on the GameObject, so mesh-local axes follow
+#               the Maya object axes in both Y-up and Z-up scenes.
+TARGET_ENGINES = ('playcanvas', 'unreal', 'unity')
+
+# Maya's internal unit (what the API returns) is centimeters.
+# Unity's importer converts the file to meters with Convert Units on.
+_UNITY_SCALE = 0.01
+
+
+def _swizzle(v, target_engine, z_up):
+    x, y, z = v
+    if target_engine == 'unreal':
+        return (x, -y, z) if z_up else (x, z, y)
+    if target_engine == 'unity':
+        return (-x, y, z)
+    return (x, y, z)
+
+
+def to_engine_position(v, target_engine, z_up=False):
+    """Convert a Maya-space position delta to the target engine's axes/units"""
+    x, y, z = _swizzle(v, target_engine, z_up)
+    if target_engine == 'unity':
+        return (x * _UNITY_SCALE, y * _UNITY_SCALE, z * _UNITY_SCALE)
+    return (x, y, z)
+
+
+def to_engine_normal(n, target_engine, z_up=False):
+    """Convert a Maya-space normal to the target engine's axes"""
+    if target_engine == 'playcanvas':
+        # PlayCanvas convention: X negated
+        return (-n[0], n[1], n[2])
+    # Axis swaps and mirrors are orthogonal, so normals use the same mapping
+    return _swizzle(n, target_engine, z_up)
+
+
 def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
                include_normals=False, export_mesh=True, use_world_space=True,
-               uv_set_name='VAT_UV', force_uv=False, skip_first_frame=False):
+               uv_set_name='VAT_UV', force_uv=False, skip_first_frame=False,
+               target_engine='playcanvas'):
     """
     Main VAT encoding function
 
@@ -32,6 +80,9 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
         skip_first_frame: If True, use first frame only as proxy reference.
                          The first frame will NOT be included in the texture.
                          Useful when first frame is T-Pose or bind pose.
+        target_engine: 'playcanvas' (default), 'unreal' or 'unity'.
+                       Sets the axes and units of the stored deltas and
+                       normals to match the engine's FBX import.
 
     Returns:
         dict with results info
@@ -39,6 +90,12 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
     # Validate mesh
     if not cmds.objExists(mesh_name):
         raise ValueError("Mesh '{}' not found".format(mesh_name))
+
+    if target_engine not in TARGET_ENGINES:
+        raise ValueError("Unknown target_engine '{}'. Use one of: {}".format(
+            target_engine, ", ".join(TARGET_ENGINES)))
+
+    z_up = cmds.upAxis(q=True, axis=True) == 'z'
 
     # Get frame range
     if frame_start is None or frame_end is None:
@@ -57,6 +114,25 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
     num_frames = total_frames - 1 if skip_first_frame else total_frames
     texture_start_frame = frame_start + 1 if skip_first_frame else frame_start
 
+    # Texture is num_verts x num_frames. Many WebGL/mobile devices stop at
+    # 8192 px per side; desktop Unreal/Unity stop at 16384.
+    max_side = max(num_verts, num_frames)
+    if max_side > 8192:
+        cmds.warning(
+            "VAT texture will be {} x {} px. Sides over 8192 px fail on many "
+            "WebGL/mobile devices; over 16384 px fail in Unreal and Unity."
+            .format(num_verts, num_frames))
+
+    # The normal texture holds one normal per vertex, so a vertex on a hard
+    # edge gets the average of its face normals and renders smooth.
+    if include_normals:
+        hard_edges = utils.count_hard_edges(mesh_name)
+        if hard_edges:
+            cmds.warning(
+                "'{}' has {} hard edge(s). The normal texture stores one normal "
+                "per vertex, so hard edges will look smooth in the engine."
+                .format(mesh_name, hard_edges))
+
     # Create output directory
     base_name = mesh_name.replace(':', '_').replace('|', '_')
     object_dir = os.path.join(output_dir, "{}_vat".format(base_name))
@@ -68,6 +144,15 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
     # Step 1: Get proxy positions (first frame)
     utils.set_current_frame(frame_start)
     proxy_positions = utils.get_vertex_positions(mesh_name, use_world_space)
+
+    # Unreal bakes the object's transform into static mesh vertices on import,
+    # so object-space data goes through the proxy-pose transform (no
+    # translation) to match the imported mesh. World-space data already does.
+    bake_matrix = None
+    if target_engine == 'unreal' and not use_world_space:
+        bake_matrix = utils.get_world_matrix(mesh_name)
+        bake_nrm_matrix = utils.normal_matrix(bake_matrix)
+    world_normals = target_engine == 'unreal' and use_world_space
 
     # Step 2: Collect all frame positions and calculate deltas
     all_deltas = {}
@@ -85,12 +170,17 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
                 pos[1] - proxy_positions[i][1],
                 pos[2] - proxy_positions[i][2]
             )
-            deltas.append(delta)
+            if bake_matrix is not None:
+                delta = utils.transform_vector(delta, bake_matrix)
+            deltas.append(to_engine_position(delta, target_engine, z_up))
 
         all_deltas[frame] = deltas
 
         if include_normals:
-            all_normals[frame] = utils.get_vertex_normals(mesh_name)
+            normals = utils.get_vertex_normals(mesh_name, world_normals)
+            if bake_matrix is not None:
+                normals = [utils.transform_normal(n, bake_nrm_matrix) for n in normals]
+            all_normals[frame] = normals
 
     # Step 3: Find min/max for remapping
     min_x, min_y, min_z, max_x, max_y, max_z = utils.find_min_max(all_deltas)
@@ -128,10 +218,10 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
             normals = all_normals[frame]
             for normal in normals:
                 # Normals are -1 to 1, remap to 0-255
-                # Flip X axis for PlayCanvas compatibility
-                r = utils.remap_value(-normal[0], -1, 1, 0, 255)
-                g = utils.remap_value(normal[1], -1, 1, 0, 255)
-                b = utils.remap_value(normal[2], -1, 1, 0, 255)
+                nx, ny, nz = to_engine_normal(normal, target_engine, z_up)
+                r = utils.remap_value(nx, -1, 1, 0, 255)
+                g = utils.remap_value(ny, -1, 1, 0, 255)
+                b = utils.remap_value(nz, -1, 1, 0, 255)
                 row.append((r, g, b))
             normal_image_data.append(row)
 
@@ -140,6 +230,7 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
 
     # Step 7: Save JSON metadata
     json_data = {
+        "target": target_engine,
         "position": {
             "min": [min_x, min_y, min_z],
             "max": [max_x, max_y, max_z],
@@ -158,7 +249,10 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
     json_path = os.path.join(object_dir, "{}_remap.json".format(base_name))
     utils.write_json(json_data, json_path)
 
-    # Step 8: Create VAT UV
+    # Step 8: Create VAT UV at the proxy pose. On a mesh with animated
+    # deformers, UV edits only hold at the frame they were made on, so they
+    # must be made on the same frame the FBX is exported at.
+    utils.set_current_frame(frame_start)
     uv_result = utils.create_vat_uv(mesh_name, num_verts, num_frames, uv_set_name, force_uv)
 
     # Step 9: Export mesh if requested
@@ -167,7 +261,10 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
         # Set frame to frame_start for correct proxy mesh pose
         utils.set_current_frame(frame_start)
         from . import exporter
-        fbx_path = exporter.export_fbx(mesh_name, object_dir, base_name)
+        # Engine targets write the FBX in centimeters, the same unit as the
+        # stored deltas, whatever the Maya working unit is
+        fbx_unit = None if target_engine == 'playcanvas' else 'cm'
+        fbx_path = exporter.export_fbx(mesh_name, object_dir, base_name, fbx_unit)
 
     # Restore original frame
     utils.set_current_frame(original_frame)
@@ -184,6 +281,7 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
         "total_frames": total_frames,
         "skip_first_frame": skip_first_frame,
         "space": "world" if use_world_space else "object",
+        "target_engine": target_engine,
         "uv_set_name": uv_set_name,
         "uv_created": uv_result.get('created', False),
         "uv_skipped": uv_result.get('skipped', False)

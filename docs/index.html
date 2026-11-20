@@ -30,7 +30,7 @@
   "alternateName": "Maya Vertex Animation Texture Baker",
   "applicationCategory": "DesignApplication",
   "operatingSystem": "Windows, macOS, Linux (Autodesk Maya 2022+)",
-  "softwareVersion": "1.1.0",
+  "softwareVersion": "1.2.0",
   "license": "https://opensource.org/licenses/MIT",
   "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
   "description": "Bake skeletal, blend shape and deformer animation into vertex animation textures (VAT) inside Autodesk Maya.",
@@ -248,7 +248,7 @@
         <a class="btn" href="https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker">View on GitHub<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
       </div>
       <ul class="meta" aria-label="At a glance">
-        <li>v1.1.0</li><li>Maya 2022+</li><li>Pure Python</li><li>MIT</li>
+        <li>v1.2.0</li><li>Maya 2022+</li><li>Pure Python</li><li>MIT</li>
       </ul>
     </div>
     <figure class="hero-media" style="margin:0">
@@ -303,6 +303,8 @@
         <div><dt>Auto VAT UVs</dt><dd>Generates a dedicated UV set that maps each vertex to its texture column.</dd></div>
         <div><dt>Skip first frame</dt><dd>Use a T-pose or bind pose as the reference mesh without baking it into the animation.</dd></div>
         <div><dt>One-click export</dt><dd>Position PNG, optional normal PNG, bounds JSON and a skin-free proxy FBX.</dd></div>
+        <div><dt>Per-engine output</dt><dd>Pick PlayCanvas, Unreal Engine or Unity. Axes, units and normals are written to match that engine's FBX import.</dd></div>
+        <div><dt>Bake checks</dt><dd>Warns before baking when the texture gets too wide for engines or when hard edges will render smooth.</dd></div>
       </dl>
     </div>
   </section>
@@ -375,9 +377,9 @@ n.x = -n.x;   <span class="c">// undo the PlayCanvas X flip if needed</span></co
       <table class="engines">
         <thead><tr><th scope="col">Engine</th><th scope="col">How</th></tr></thead>
         <tbody>
-          <tr><th scope="row">Unreal Engine</th><td>Material World Position Offset reading the VAT texture (point sampling, no compression/sRGB)</td></tr>
-          <tr><th scope="row">Unity</th><td>Shader Graph / HLSL vertex stage, sample with <code>tex2Dlod</code></td></tr>
-          <tr><th scope="row">PlayCanvas / three.js / WebGL</th><td>Custom vertex shader chunk. Normal X is pre-flipped for PlayCanvas.</td></tr>
+          <tr><th scope="row">Unreal Engine</th><td>Bake with Target Engine = Unreal. Material World Position Offset reading the VAT texture (point sampling, no compression/sRGB, Full Precision UVs). Decode normals in the vertex stage through a VertexInterpolator.</td></tr>
+          <tr><th scope="row">Unity</th><td>Bake with Target Engine = Unity (meters). Shader Graph / HLSL vertex stage, sample with <code>tex2Dlod</code> and read frame rows from the top.</td></tr>
+          <tr><th scope="row">PlayCanvas / three.js / WebGL</th><td>Default target (Maya axes). Custom vertex shader chunk. Normal X is pre-flipped for PlayCanvas.</td></tr>
         </tbody>
       </table>
     </div>

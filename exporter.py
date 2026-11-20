@@ -17,7 +17,7 @@ def ensure_fbx_plugin():
             raise RuntimeError("FBX plugin not available")
 
 
-def export_fbx(mesh_name, output_dir, base_name=None):
+def export_fbx(mesh_name, output_dir, base_name=None, unit=None):
     """
     Export mesh as FBX with VAT UV
 
@@ -25,6 +25,7 @@ def export_fbx(mesh_name, output_dir, base_name=None):
         mesh_name: Name of mesh to export
         output_dir: Output directory
         base_name: Base name for file (default: mesh_name)
+        unit: FBX file unit such as 'cm' (default: Maya working unit)
 
     Returns:
         Path to exported FBX file
@@ -58,6 +59,8 @@ def export_fbx(mesh_name, output_dir, base_name=None):
     mel.eval('FBXExportInputConnections -v false')
     mel.eval('FBXExportUseSceneName -v false')
     mel.eval('FBXExportInAscii -v false')
+    if unit:
+        mel.eval('FBXExportConvertUnitString {}'.format(unit))
 
     # Animation off
     mel.eval('FBXExportBakeComplexAnimation -v false')

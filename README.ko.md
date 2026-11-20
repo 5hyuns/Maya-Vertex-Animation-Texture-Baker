@@ -2,7 +2,7 @@
 [![Maya](https://img.shields.io/badge/Maya-2022+-00B4FF?style=flat-square&logo=autodesk)](https://www.autodesk.com/products/maya)
 [![Python](https://img.shields.io/badge/Python-Pure-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.1.0-blue?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-1.2.0-blue?style=flat-square)]()
 
 🌐 [English](README.md) | 한국어 · 🔗 **[프로젝트 페이지](https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/)** · ⬇️ **[다운로드](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)**
 
@@ -31,6 +31,7 @@
 ## 특징
 
 - **의존성 없음** - 순수 Python, 추가 설치 불필요
+- **Target Engine** - PlayCanvas / WebGL, Unreal Engine, Unity의 축과 단위에 맞춰 베이크
 - **Object/World Space** - 용도에 맞는 좌표계 선택
 - **자동 VAT UV 생성** - 버텍스 ID 기반 UV 자동 할당
 - **Skip First Frame** - T-Pose 제외 옵션
@@ -67,7 +68,7 @@ maya_vat.show()
 ```
 
 1. 애니메이션된 메시를 선택하고 **Target Mesh** 옆 `<<` 버튼을 누릅니다.
-2. **Frame Range**(`Timeline` 버튼으로 타임라인 범위 입력), **Coordinate Space**, 옵션을 설정합니다.
+2. **Frame Range**(`Timeline` 버튼으로 타임라인 범위 입력), **Target Engine**, **Coordinate Space**, 옵션을 설정합니다.
 3. **Output Directory**를 지정하고 **Encode VAT**를 누릅니다.
 
 ---
@@ -75,6 +76,23 @@ maya_vat.show()
 ## 옵션
 
 ![UI](https://github.com/user-attachments/assets/dd124ec8-42ee-4941-a186-06b7c061b25c)
+
+### Target Engine
+
+엔진마다 FBX 임포터가 프록시 메시를 자기 축과 단위로 바꿉니다. 선택한 타깃은 오프셋과 노멀을 그 축과 단위로 저장합니다. 그래서 셰이더는 디코딩한 오프셋을 임포트된 버텍스 위치에 그대로 더하면 됩니다.
+
+| 타깃 | 저장 데이터의 축 / 단위 | 노멀 |
+|------|------------------------|------|
+| **PlayCanvas / WebGL** (기본값) | Maya 축 (Y-up), 센티미터 | X 반전 |
+| **Unreal Engine** | Z-up, 왼손 좌표계, 센티미터: `(x, y, z)` → `(x, z, y)` (Maya 씬이 Z-up이면 `(x, -y, z)`) | 위치와 같은 매핑 |
+| **Unity** | Y-up, 왼손 좌표계, 미터: `(x, y, z)` → `(-x, y, z) × 0.01` | 위치와 같은 매핑 |
+
+- Unreal과 Unity 타깃은 Maya 작업 단위와 상관없이 FBX를 센티미터로 씁니다.
+- PlayCanvas 타깃은 GLB로 바꿀 때 FBX의 메시 축이 그대로 유지된다고 전제합니다. Blender의 glTF 익스포트는 **+Y Up**(기본값)일 때 버텍스 데이터를 `(x, z, -y)`로 바꾸므로 오프셋과 노멀이 메시와 어긋납니다.
+- Unreal 매핑은 FBX 임포트 옵션 **Convert Scene = 켬**, **Force Front XAxis = 끔**(둘 다 기본값)을 전제로 합니다.
+- Unreal은 임포트할 때 오브젝트 Transform을 Static Mesh 버텍스에 구워 넣습니다. **Object** space에서는 Unreal 타깃이 첫 프레임의 오브젝트 회전과 스케일을 오프셋과 노멀에 적용해서 임포트된 메시와 맞춥니다.
+- Unity 매핑은 **Convert Units = 켬**(기본값)을 전제로 합니다. Unity는 오브젝트 Transform(Z-up 씬이면 업 축 회전까지)을 GameObject에 남기므로 Y-up, Z-up 씬 모두 동작합니다.
+- 텍스처 레이아웃, UV, JSON 키는 모든 타깃이 같습니다. 엔진 설정은 [엔진에서 재생하기](#엔진에서-재생하기)를 보세요.
 
 ### Coordinate Space
 
@@ -159,7 +177,7 @@ Height = 프레임 수
 |------|-----|
 | 포맷 | 8-bit RGB PNG |
 | Position | `delta = position(frame) - position(proxy)`, 축별로 전체 공통 min/max 하나로 리맵 |
-| Normal | -1..1 → 0..255, **X축 반전** (PlayCanvas 호환) |
+| Normal | -1..1 → 0..255, [Target Engine](#target-engine)의 축 기준 (PlayCanvas: **X축 반전**) |
 | VAT UV | `U = (vertex_id + 0.5) / vertex_count`, `V` = 첫 행의 중앙 |
 | 프록시 | 프레임 범위 첫 프레임의 메시 포즈 |
 
@@ -167,6 +185,7 @@ Height = 프레임 수
 
 ```json
 {
+    "target": "unreal",
     "position": {
         "min": [-2.5, -1.0, -0.5],
         "max": [3.2, 4.5, 1.2],
@@ -181,7 +200,7 @@ Height = 프레임 수
 }
 ```
 
-`normal`은 노멀을 출력했을 때만 들어갑니다.
+`target`은 [Target Engine](#target-engine) 값(`playcanvas`, `unreal`, `unity`)입니다. `normal`은 노멀을 출력했을 때만 들어갑니다.
 
 ---
 
@@ -199,7 +218,7 @@ float3 offset = lerp(boundsMin, boundsMax, enc);
 float3 posOS  = proxyPositionOS + offset;
 
 float3 n = tex2Dlod(_VatNormal, float4(uv, 0, 0)).rgb * 2 - 1;
-n.x = -n.x;   // X 반전 되돌리기 (엔진이 PlayCanvas 규칙을 따르면 생략)
+n.x = -n.x;   // PlayCanvas 타깃만: X 반전을 되돌려 Maya 축으로
 ```
 
 텍스처 임포트 설정:
@@ -209,6 +228,58 @@ n.x = -n.x;   // X 반전 되돌리기 (엔진이 PlayCanvas 규칙을 따르면
 - 엔진이 텍스처를 V 반전 상태로 읽는다면 V를 뒤집어 주세요 (예: `1 - v`).
 
 8-bit 정밀도는 축별로 `(max - min) / 255`입니다. 움직임 범위가 클수록 단계가 거칠어집니다.
+
+### Unreal Engine
+
+**Target Engine = Unreal Engine**으로 베이크합니다.
+
+**FBX 임포트 (Static Mesh):** **Convert Scene**은 켜고 **Force Front XAxis**는 끈 상태로 둡니다(기본값). Interchange 임포터에서는 소스 파일 옆 `...` 메뉴에 있습니다.
+
+**Static Mesh 에디터:**
+
+- **Build Settings > Use Full Precision UVs: 켬.** Unreal은 기본으로 UV를 16-bit float로 저장합니다. 그래서 텍스처 가로가 버텍스 약 1000개를 넘으면 픽셀 하나를 정확히 가리키지 못합니다. 버텍스가 옆 열을 읽어서 메시가 찢어집니다.
+- **Nanite: 끔.**
+- **Positive / Negative Bounds Extension**(또는 컴포넌트의 Bounds Scale)을 움직임 범위만큼 늘립니다. 그러지 않으면 움직이는 동안 컬링됩니다.
+
+**텍스처 (`_vat.png`, `_vnrm.png`):**
+
+| 설정 | 값 |
+|------|-----|
+| Compression Settings | `VectorDisplacementmap (RGBA8)` |
+| sRGB | 끔 |
+| Filter | `Nearest` |
+| Mip Gen Settings | `NoMipmaps` |
+
+**머티리얼:** **Custom** 노드를 추가합니다. 입력은 `VatTex`(Texture Object), `VatUV`(`VAT_UV` 인덱스의 `TexCoord`, 보통 **1**), `Frame`, `Frames`, `BoundsMin`, `BoundsMax`이고 출력 타입은 `CMOT Float 3`입니다.
+
+```hlsl
+float2 uv  = float2(VatUV.x, (floor(Frame) + 0.5) / Frames);
+float3 enc = Texture2DSampleLevel(VatTex, VatTexSampler, uv, 0).rgb;
+return lerp(BoundsMin, BoundsMax, enc);
+```
+
+- `Frames`, `BoundsMin`, `BoundsMax`는 `remap.json`의 `position.frames`, `position.min`, `position.max`입니다. `Frame`은 `fmod(Time * FPS, Frames)`처럼 만들 수 있습니다.
+- **Object** space로 구웠다면 결과를 **TransformVector (Local Space → World Space)**를 거쳐 **World Position Offset**에 연결합니다. **World** space로 구웠다면 바로 연결합니다.
+- 노멀: 버텍스 단계에서 디코딩합니다. 같은 코드의 Custom 노드를 하나 더 만들어 `_vnrm.png`에 연결하고 `BoundsMin = -1`, `BoundsMax = 1`로 둡니다(`rgb * 2 - 1`과 같음). Object 스페이스로 베이크했다면 결과를 Local → World로 변환합니다. 그 값을 **VertexInterpolator** 노드에 통과시키고, 인터폴레이터 출력을 **Normal**에 연결한 뒤 머티리얼 디테일에서 **Tangent Space Normal**을 끕니다. 노멀 텍스처를 픽셀 단계에서 샘플링하면 안 됩니다. 픽셀 단계에서는 `VAT_UV`가 삼각형 안에서 보간되어 이웃 버텍스의 열을 읽게 됩니다.
+
+### Unity
+
+**Target Engine = Unity**로 베이크합니다.
+
+**모델 임포트:** **Convert Units: 켬**, **Mesh Compression: Off**(둘 다 기본값). `VAT_UV`는 두 번째 UV 채널입니다(`TEXCOORD1` / Shader Graph `UV1`).
+
+**텍스처:** sRGB 끔, **Non-Power of 2: None**, **Generate Mip Maps: 끔**, **Filter Mode: Point**, **Compression: None**, **Wrap Mode: Clamp**. 기본값인 *Non-Power of 2: ToNearest*는 텍스처 크기를 바꿔서 열 조회가 깨집니다.
+
+Unity 텍스처는 V = 0이 맨 아래 행이므로 프레임 행을 위에서부터 읽습니다.
+
+```hlsl
+float2 uv     = float2(vatUV.x, 1.0 - (frame + 0.5) / frames);
+float3 enc    = tex2Dlod(_VatPosition, float4(uv, 0, 0)).rgb;
+float3 posOS  = v.vertex.xyz + lerp(_BoundsMin, _BoundsMax, enc);   // object space, 미터
+float3 nrmOS  = tex2Dlod(_VatNormal, float4(uv, 0, 0)).rgb * 2 - 1;
+```
+
+**World** space로 구웠다면 오프셋은 Unity 월드 축 기준입니다. 오브젝트→월드 변환 뒤에 더하세요. 예: `posWS = TransformObjectToWorld(v.vertex.xyz) + lerp(_BoundsMin, _BoundsMax, enc)`. 월드 스페이스 오프셋은 그 포즈에서만 맞으므로, FBX를 임포트했을 때의 오브젝트 트랜스폼을 그대로 두세요. 노멀 텍스처는 어느 방식으로 굽든 오브젝트 스페이스이므로, `nrmOS`는 항상 오브젝트→월드 노멀 변환으로 바꿉니다.
 
 ---
 
@@ -229,7 +300,8 @@ result = core.encode_vat(
     use_world_space=False,      # Object Space 권장
     uv_set_name="VAT_UV",
     force_uv=False,
-    skip_first_frame=True       # T-Pose 제외
+    skip_first_frame=True,      # T-Pose 제외
+    target_engine="unreal"     # "playcanvas"(기본값), "unreal", "unity"
 )
 
 # 반환값
@@ -293,11 +365,13 @@ maya_vat/
 - 스킨/본 제외 (VAT는 스킨 불필요)
 - 블렌드쉐입 제외
 - 애니메이션 제외 (첫 프레임만)
+- Unreal과 Unity 타깃은 센티미터로 씁니다
 
 ### 제한 사항
 
 - 프레임 범위 전체에서 버텍스 수와 순서가 같아야 합니다 (토폴로지가 바뀌는 애니메이션은 지원하지 않음).
-- 텍스처 가로 크기 = 버텍스 수입니다. 하이폴리 메시라면 대상 엔진의 최대 텍스처 크기를 확인하세요.
+- 텍스처 가로 크기 = 버텍스 수입니다. 하이폴리 메시라면 대상 엔진의 최대 텍스처 크기를 확인하세요. 한 변이 8192 px을 넘으면 베이커가 경고합니다.
+- 노멀 텍스처는 버텍스마다 노멀을 하나만 저장하므로, 노멀 텍스처를 쓰면 하드 엣지가 부드럽게 보입니다. 하드 엣지를 유지하려면 베이크 전에 Maya에서 그 엣지를 분리하세요(Edit Mesh > Detach). 그러면 양쪽 면이 각자 버텍스를 갖습니다. 메시에 하드 엣지가 있으면 베이커가 경고합니다.
 
 ---
 
