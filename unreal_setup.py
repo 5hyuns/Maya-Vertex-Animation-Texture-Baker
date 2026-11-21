@@ -67,6 +67,7 @@ def write_setup_script(path, mesh, position_texture, normal_texture, space,
 
 # The fixed part of the script. It runs in the Unreal Editor's Python.
 _BODY = r'''
+import math
 import unreal
 
 # Reads one texel per vertex: column = VAT UV x, row = frame
@@ -165,8 +166,8 @@ def setup_mesh(mesh):
     mesh.set_editor_property(
         "negative_bounds_extension", unreal.Vector(*NEGATIVE_BOUNDS_EXTENSION))
 
-    # With Nanite the bounds extension does not cover the offset: the shadow
-    # leaves trails on the ground or disappears
+    # With Nanite the bounds extension alone does not cover the offset: the
+    # shadow leaves trails on the ground or disappears (see set_max_offset)
     nanite = mesh.get_editor_property("nanite_settings")
     if nanite.get_editor_property("enabled"):
         nanite.set_editor_property("enabled", False)
@@ -263,7 +264,24 @@ def build_graph(material, position_texture, normal_texture):
         interpolator = expression(material, unreal.MaterialExpressionVertexInterpolator, -50, 600)
         MEL.connect_material_expressions(normal, "", interpolator, "VS")
         material.set_editor_property("tangent_space_normal", False)
+
+    set_max_offset(material)
     return offset, interpolator
+
+
+def set_max_offset(material):
+    """
+    Tell the engine how far World Position Offset moves the vertices. Culling
+    and shadows (Nanite included) grow by this distance, and the engine may
+    clamp the offset to it, so use the length of the largest offset on every axis.
+    """
+    limit = math.sqrt(sum(max(abs(lo), abs(hi)) ** 2
+                          for lo, hi in zip(BOUNDS_MIN, BOUNDS_MAX)))
+    try:
+        material.set_editor_property("max_world_position_offset_displacement", limit)
+    except Exception:
+        log("This engine version has no Max World Position Offset Displacement; "
+            "keep Nanite off and the bounds extension.")
 
 
 def build_material(mesh, position_texture, normal_texture):

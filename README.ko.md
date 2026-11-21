@@ -241,7 +241,7 @@ n.x = -n.x;   // PlayCanvas 타깃만: X 반전을 되돌려 Maya 축으로
 **Static Mesh 에디터:**
 
 - **Build Settings > Use Full Precision UVs: 켬.** Unreal은 기본으로 UV를 16-bit float로 저장합니다. 그래서 텍스처 가로가 버텍스 약 1000개를 넘으면 픽셀 하나를 정확히 가리키지 못합니다. 버텍스가 옆 열을 읽어서 메시가 찢어집니다.
-- **Nanite: 끔.** Nanite를 켜면 아래 바운드 확장이 World Position Offset을 덮지 못합니다. 확장이 없으면 움직이는 메시가 바닥에 그림자 자국을 남기고(UE5 기본값인 Virtual Shadow Map), 확장을 넣으면 그림자가 사라집니다.
+- **Nanite: 끔.** Nanite를 켜면 아래 바운드 확장이 World Position Offset을 덮지 못하고, 그림자를 맞게 유지하는 것은 머티리얼의 **Max World Position Offset Displacement**(머티리얼 항목 참고)입니다. 이 값이 없으면 움직이는 메시가 바닥에 그림자 자국을 남기거나(UE5 기본값인 Virtual Shadow Map) 그림자를 잃습니다.
 - **Positive Bounds Extension = `position.max`**, **Negative Bounds Extension = 부호를 뒤집은 `position.min`**(`remap.json` 값이며, Encode VAT 대화상자에도 표시됩니다). 언리얼은 첫 프레임 포즈로 바운드를 계산하는데, 이 값을 넣으면 모든 프레임의 모든 버텍스를 덮습니다. 바운드가 작으면 움직이는 동안 메시가 컬링되고, 그림자는 첫 프레임 포즈 근처에서만 그려집니다. 바운드나 Nanite 설정을 바꾼 뒤에는 레벨을 다시 열어 이전에 캐시된 그림자를 지우세요.
 
 **텍스처 (`_vat.png`, `_vnrm.png`):**
@@ -263,6 +263,7 @@ return lerp(BoundsMin, BoundsMax, enc);
 
 - `Frames`, `BoundsMin`, `BoundsMax`는 `remap.json`의 `position.frames`, `position.min`, `position.max`입니다. 이 값을 `BoundsMin`/`BoundsMax` 상수에 입력하세요. 둘 다 0이면 메시가 움직이지 않습니다. `Frame`은 `fmod(Time * FPS, Frames)`처럼 만들 수 있습니다.
 - **Object** space로 구웠다면 결과를 **TransformVector (Local Space → World Space)**를 거쳐 **World Position Offset**에 연결합니다. **World** space로 구웠다면 바로 연결합니다.
+- 머티리얼의 **Max World Position Offset Displacement**를 `sqrt(X² + Y² + Z²)`로 설정합니다. 각 축 값은 `|position.min|`과 `|position.max|` 중 큰 쪽입니다. 컬링과 그림자가 Nanite 여부와 관계없이 이 거리만큼 넓어집니다. 값이 작으면 움직임이 잘릴 수 있습니다.
 - 노멀: 버텍스 단계에서 디코딩합니다. 같은 코드의 Custom 노드를 하나 더 만들어 `_vnrm.png`에 연결하고 `BoundsMin = -1`, `BoundsMax = 1`로 둡니다(`rgb * 2 - 1`과 같음). Object 스페이스로 베이크했다면 결과를 Local → World로 변환합니다. 그 값을 **VertexInterpolator** 노드에 통과시키고, 인터폴레이터 출력을 **Normal**에 연결한 뒤 머티리얼 디테일에서 **Tangent Space Normal**을 끕니다. 노멀 텍스처를 픽셀 단계에서 샘플링하면 안 됩니다. 픽셀 단계에서는 `VAT_UV`가 삼각형 안에서 보간되어 이웃 버텍스의 열을 읽게 됩니다.
 - 노멀 텍스처가 없으면 World Position Offset이 버텍스는 옮기지만 메시는 첫 프레임의 노멀을 유지합니다. 그래서 뒤집히는 메시는 각 면을 첫 프레임 방향 그대로 비춥니다. 예를 들어 위로 돌아온 면이 계속 어둡게 보입니다.
 - 노멀 텍스처 없이 각진 메시를 쓰려면 머티리얼에서 플랫 노멀을 만들 수 있습니다. **Normalize(Cross(DDX(Absolute World Position), DDY(Absolute World Position)))**를 **Normal**에 연결하고(A/B 순서를 지키세요. 반대로 하면 노멀이 안쪽을 향합니다) **Tangent Space Normal**을 끕니다. 모든 삼각형이 평평하게 셰이딩되므로 매끈한 표면은 각져 보입니다.

@@ -241,7 +241,7 @@ Bake with **Target Engine = Unreal Engine**.
 **Static Mesh editor:**
 
 - **Build Settings > Use Full Precision UVs: on.** Unreal stores UVs as 16-bit floats by default, which cannot address single pixels once the texture is wider than about 1000 vertices. Vertices then read their neighbors' columns and the mesh tears.
-- **Nanite: off.** With Nanite on, the bounds extension below does not cover the World Position Offset: without it the moving mesh leaves shadow trails on the ground (Virtual Shadow Maps, the UE5 default), and with it the shadow disappears.
+- **Nanite: off.** With Nanite on, the bounds extension below does not cover the World Position Offset; the material's **Max World Position Offset Displacement** (see Material) is what keeps the shadow right. Without it the moving mesh leaves shadow trails on the ground (Virtual Shadow Maps, the UE5 default) or loses its shadow.
 - **Positive Bounds Extension = `position.max`** and **Negative Bounds Extension = `position.min` with the sign flipped** (from `remap.json`; the Encode VAT dialog shows both). Unreal computes the bounds from the first-frame pose, and these values make them cover every vertex in every frame. With smaller bounds the mesh is culled while it moves, and its shadow is only drawn near the first-frame pose. Reopen the level after changing the bounds or Nanite to clear shadows cached before the change.
 
 **Textures (`_vat.png`, `_vnrm.png`):**
@@ -263,6 +263,7 @@ return lerp(BoundsMin, BoundsMax, enc);
 
 - `Frames`, `BoundsMin`, `BoundsMax` come from `remap.json` (`position.frames`, `position.min`, `position.max`). Type the values into the `BoundsMin`/`BoundsMax` constants; if both stay 0, the mesh does not move. `Frame` can be `fmod(Time * FPS, Frames)`.
 - With an **Object** space bake, connect the result through **TransformVector (Local Space → World Space)** to **World Position Offset**. With a **World** space bake, connect it directly.
+- Set the material's **Max World Position Offset Displacement** to `sqrt(X² + Y² + Z²)`, where each axis is the larger of `|position.min|` and `|position.max|`. Culling and shadows grow by this distance, with or without Nanite. A smaller value can clamp the motion.
 - Normals: decode them in the vertex stage. Use a second Custom node with the same code on `_vnrm.png` and `BoundsMin = -1`, `BoundsMax = 1` (this gives `rgb * 2 - 1`). With an Object space bake, transform the result Local → World. Pass it through a **VertexInterpolator** node, connect the interpolator output to **Normal**, and turn off **Tangent Space Normal** in the material details. Do not sample the normal texture in the pixel stage: `VAT_UV` is interpolated across each triangle there, so the lookup reads neighboring vertices' columns.
 - Without the normal texture, World Position Offset moves the vertices but the mesh keeps its first-frame normals. A mesh that turns over then lights each face as it faced on the first frame, for example a face that turns up stays dark.
 - For a hard-edged mesh without a normal texture, flat normals can come from the material instead: connect **Normalize(Cross(DDX(Absolute World Position), DDY(Absolute World Position)))** to **Normal** (keep this A/B order; the reverse points the normals inward) and turn off **Tangent Space Normal**. Every triangle is then lit flat, so smooth surfaces look faceted.
