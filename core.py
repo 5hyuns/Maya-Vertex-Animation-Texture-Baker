@@ -34,6 +34,34 @@ _UNITY_SCALE = 0.01
 # Below this (cm, or matrix element difference) a bake counts as motionless
 _MOTION_TOLERANCE = 1e-6
 
+# A normal component change above this (about one degree) changes the lighting
+_NORMAL_TOLERANCE = 0.02
+
+
+def _normals_differ(a, b):
+    """True when any vertex normal in b differs from a by more than the tolerance"""
+    for n0, n1 in zip(a, b):
+        if (abs(n0[0] - n1[0]) > _NORMAL_TOLERANCE
+                or abs(n0[1] - n1[1]) > _NORMAL_TOLERANCE
+                or abs(n0[2] - n1[2]) > _NORMAL_TOLERANCE):
+            return True
+    return False
+
+
+def bounds_extension(position_min, position_max):
+    """
+    How far the engine's mesh bounds must grow to hold the whole animation.
+
+    Engines compute the bounds from the proxy (first frame) pose. Every decoded
+    offset lies between min and max, so growing the bounds by max on the
+    positive side and by -min on the negative side covers every vertex in
+    every frame. Values are in the target engine's axes and units.
+    """
+    return {
+        "positive": [max(0.0, v) for v in position_max],
+        "negative": [max(0.0, -v) for v in position_min],
+    }
+
 
 def _swizzle(v, target_engine, z_up):
     x, y, z = v
@@ -126,15 +154,20 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
             "WebGL/mobile devices; over 16384 px fail in Unreal and Unity."
             .format(num_verts, num_frames))
 
+    warnings = []
+
     # The normal texture holds one normal per vertex, so a vertex on a hard
     # edge gets the average of its face normals and renders smooth.
     if include_normals:
         hard_edges = utils.count_hard_edges(mesh_name)
         if hard_edges:
-            cmds.warning(
+            message = (
                 "'{}' has {} hard edge(s). The normal texture stores one normal "
-                "per vertex, so hard edges will look smooth in the engine."
+                "per vertex, so hard edges will look smooth in the engine. To "
+                "keep them, split them before baking (Edit Mesh > Detach)."
                 .format(mesh_name, hard_edges))
+            warnings.append(message)
+            cmds.warning(message)
 
     # Create output directory
     base_name = mesh_name.replace(':', '_').replace('|', '_')
@@ -162,6 +195,12 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
     proxy_matrix = utils.get_world_matrix(mesh_name)
     transform_moves = False
 
+    # Without a normal texture the engine keeps the proxy-pose normals, so a
+    # mesh that turns or bends keeps the lighting of its first frame
+    proxy_normals = (None if include_normals
+                     else utils.get_vertex_normals(mesh_name, use_world_space))
+    normals_change = False
+
     # Step 2: Collect all frame positions and calculate deltas
     all_deltas = {}
     all_normals = {} if include_normals else None
@@ -172,6 +211,9 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
         if not transform_moves:
             transform_moves = not utils.get_world_matrix(mesh_name).isEquivalent(
                 proxy_matrix, _MOTION_TOLERANCE)
+        if proxy_normals is not None and not normals_change:
+            normals_change = _normals_differ(
+                proxy_normals, utils.get_vertex_normals(mesh_name, use_world_space))
 
         # Calculate delta from proxy
         deltas = []
@@ -197,7 +239,6 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
     min_x, min_y, min_z, max_x, max_y, max_z = utils.find_min_max(all_deltas)
 
     # All-zero bounds give a black position texture that plays no animation
-    warnings = []
     if max(max_x - min_x, max_y - min_y, max_z - min_z) <= _MOTION_TOLERANCE:
         if transform_moves and not use_world_space:
             message = (
@@ -211,6 +252,15 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
                 "'{}' does not move between frames {} and {}. The position "
                 "texture is empty (remap min/max are 0)."
                 .format(mesh_name, frame_start, frame_end))
+        warnings.append(message)
+        cmds.warning(message)
+
+    if normals_change:
+        message = (
+            "'{}' turns or bends between frames {} and {}, but normals are not "
+            "exported, so the engine keeps the lighting of the first frame. "
+            "Turn on Export Normals."
+            .format(mesh_name, frame_start, frame_end))
         warnings.append(message)
         cmds.warning(message)
 
@@ -298,6 +348,30 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
     # Restore original frame
     utils.set_current_frame(original_frame)
 
+    extension = bounds_extension((min_x, min_y, min_z), (max_x, max_y, max_z))
+
+    # Step 10: Unreal setup script (texture/mesh settings and the material)
+    setup_script_path = None
+    if target_engine == 'unreal':
+        from . import unreal_setup
+        # The FBX keeps the UV set order, so this is the UV channel in Unreal
+        uv_sets = utils.get_uv_set_names(mesh_name)
+        uv_index = uv_sets.index(uv_set_name) if uv_set_name in uv_sets else 1
+        setup_script_path = os.path.join(
+            object_dir, "{}_ue_setup.py".format(base_name))
+        unreal_setup.write_setup_script(
+            setup_script_path,
+            mesh=base_name,
+            position_texture="{}_vat".format(base_name),
+            normal_texture="{}_vnrm".format(base_name) if include_normals else None,
+            space="world" if use_world_space else "object",
+            uv_index=uv_index,
+            frames=num_frames,
+            fps=utils.get_scene_fps(),
+            position_min=(min_x, min_y, min_z),
+            position_max=(max_x, max_y, max_z),
+            extension=extension)
+
     return {
         "success": True,
         "png_path": png_path,
@@ -314,6 +388,8 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
         "uv_set_name": uv_set_name,
         "uv_created": uv_result.get('created', False),
         "uv_skipped": uv_result.get('skipped', False),
+        "bounds_extension": extension,
+        "setup_script_path": setup_script_path,
         "warnings": warnings
     }
 

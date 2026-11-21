@@ -99,9 +99,21 @@ def get_vertex_count(mesh_name):
 
 
 def count_hard_edges(mesh_name):
-    """Count edges that are not smoothed (hard edges)"""
-    mesh_fn = get_mesh_fn(mesh_name)
-    return sum(1 for i in range(mesh_fn.numEdges) if not mesh_fn.isEdgeSmooth(i))
+    """
+    Count hard edges shared by two faces.
+
+    Only those need two normals on one vertex. A border edge (for example
+    after Edit Mesh > Detach) already gives each side its own vertices.
+    """
+    sel = om2.MSelectionList()
+    sel.add(mesh_name)
+    edge_it = om2.MItMeshEdge(sel.getDagPath(0))
+    count = 0
+    while not edge_it.isDone():
+        if not edge_it.isSmooth and not edge_it.onBoundary():
+            count += 1
+        edge_it.next()
+    return count
 
 
 def get_frame_range():
@@ -109,6 +121,12 @@ def get_frame_range():
     start = int(cmds.playbackOptions(q=True, min=True))
     end = int(cmds.playbackOptions(q=True, max=True))
     return start, end
+
+
+def get_scene_fps():
+    """Frames per second of the scene's time unit"""
+    seconds = om2.MTime(1.0, om2.MTime.uiUnit()).asUnits(om2.MTime.kSeconds)
+    return 1.0 / seconds
 
 
 def set_current_frame(frame):

@@ -2,7 +2,7 @@
 [![Maya](https://img.shields.io/badge/Maya-2022+-00B4FF?style=flat-square&logo=autodesk)](https://www.autodesk.com/products/maya)
 [![Python](https://img.shields.io/badge/Python-Pure-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.1-blue?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-1.3.0-blue?style=flat-square)]()
 
 🌐 [English](README.md) | 한국어 · 🔗 **[프로젝트 페이지](https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/)** · ⬇️ **[다운로드](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)**
 
@@ -114,7 +114,7 @@ ON이면 첫 프레임은 프록시(기준) 포즈로만 쓰이고 텍스처에�
 
 | 옵션 | 설명 |
 |------|------|
-| **Export Normals (separate texture)** | `<mesh>_vnrm.png`도 함께 출력 |
+| **Export Normals (separate texture)** | `<mesh>_vnrm.png`도 함께 출력합니다. 기본으로 켜져 있습니다. 끄면 엔진이 첫 프레임의 노멀을 그대로 쓰므로, 회전하거나 휘는 메시는 첫 프레임의 조명을 유지합니다. 이 경우 베이커가 경고합니다. |
 | **Export Mesh (FBX)** | 첫 프레임 포즈의 프록시 메시 출력 |
 | **UV Set Name** / **Overwrite if exists** | 생성할 VAT UV 세트 이름. Overwrite를 켜면 기존 세트를 지우고 다시 만듭니다. **Create VAT UV**는 UV 세트만 만듭니다. |
 
@@ -129,6 +129,7 @@ output_dir/
     +-- <mesh>_vnrm.png      # Normal 텍스처 (선택)
     +-- <mesh>_remap.json    # 디코딩용 min/max 바운드
     +-- <mesh>.fbx           # 프록시 메시 (선택)
+    +-- <mesh>_ue_setup.py   # 언리얼 엔진 셋업 스크립트 (Unreal 타깃만)
 ```
 
 메시 이름의 `:`와 `|`는 `_`로 바뀝니다.
@@ -233,13 +234,15 @@ n.x = -n.x;   // PlayCanvas 타깃만: X 반전을 되돌려 Maya 축으로
 
 **Target Engine = Unreal Engine**으로 베이크합니다.
 
+**셋업 스크립트(`<mesh>_ue_setup.py`):** FBX와 텍스처를 콘텐츠 브라우저의 한 폴더에 임포트하고, 스태틱 메시를 선택한 뒤 스크립트를 실행합니다(Tools > Execute Python Script). 아래 설정을 모두 적용하고, 이 섹션의 노드로 `M_<mesh>_VAT`를 만들어 메시에 지정합니다. 엔진의 Python이 **World Position Offset**을 연결하지 못하는 버전(예: Unreal Engine 5.4)에서는 연결할 노드에 "Connect to World Position Offset"이 표시되니, 그 핀 하나만 직접 연결하세요. 이 섹션의 나머지는 같은 설정을 손으로 하는 방법입니다.
+
 **FBX 임포트 (Static Mesh):** **Convert Scene**은 켜고 **Force Front XAxis**는 끈 상태로 둡니다(기본값). Interchange 임포터에서는 소스 파일 옆 `...` 메뉴에 있습니다.
 
 **Static Mesh 에디터:**
 
 - **Build Settings > Use Full Precision UVs: 켬.** Unreal은 기본으로 UV를 16-bit float로 저장합니다. 그래서 텍스처 가로가 버텍스 약 1000개를 넘으면 픽셀 하나를 정확히 가리키지 못합니다. 버텍스가 옆 열을 읽어서 메시가 찢어집니다.
-- **Nanite: 끔.**
-- **Positive / Negative Bounds Extension**(또는 컴포넌트의 Bounds Scale)을 움직임 범위만큼 늘립니다. 그러지 않으면 움직이는 동안 컬링됩니다.
+- **Nanite: 끔.** Nanite를 켜면 아래 바운드 확장이 World Position Offset을 덮지 못합니다. 확장이 없으면 움직이는 메시가 바닥에 그림자 자국을 남기고(UE5 기본값인 Virtual Shadow Map), 확장을 넣으면 그림자가 사라집니다.
+- **Positive Bounds Extension = `position.max`**, **Negative Bounds Extension = 부호를 뒤집은 `position.min`**(`remap.json` 값이며, Encode VAT 대화상자에도 표시됩니다). 언리얼은 첫 프레임 포즈로 바운드를 계산하는데, 이 값을 넣으면 모든 프레임의 모든 버텍스를 덮습니다. 바운드가 작으면 움직이는 동안 메시가 컬링되고, 그림자는 첫 프레임 포즈 근처에서만 그려집니다. 바운드나 Nanite 설정을 바꾼 뒤에는 레벨을 다시 열어 이전에 캐시된 그림자를 지우세요.
 
 **텍스처 (`_vat.png`, `_vnrm.png`):**
 
@@ -261,6 +264,8 @@ return lerp(BoundsMin, BoundsMax, enc);
 - `Frames`, `BoundsMin`, `BoundsMax`는 `remap.json`의 `position.frames`, `position.min`, `position.max`입니다. 이 값을 `BoundsMin`/`BoundsMax` 상수에 입력하세요. 둘 다 0이면 메시가 움직이지 않습니다. `Frame`은 `fmod(Time * FPS, Frames)`처럼 만들 수 있습니다.
 - **Object** space로 구웠다면 결과를 **TransformVector (Local Space → World Space)**를 거쳐 **World Position Offset**에 연결합니다. **World** space로 구웠다면 바로 연결합니다.
 - 노멀: 버텍스 단계에서 디코딩합니다. 같은 코드의 Custom 노드를 하나 더 만들어 `_vnrm.png`에 연결하고 `BoundsMin = -1`, `BoundsMax = 1`로 둡니다(`rgb * 2 - 1`과 같음). Object 스페이스로 베이크했다면 결과를 Local → World로 변환합니다. 그 값을 **VertexInterpolator** 노드에 통과시키고, 인터폴레이터 출력을 **Normal**에 연결한 뒤 머티리얼 디테일에서 **Tangent Space Normal**을 끕니다. 노멀 텍스처를 픽셀 단계에서 샘플링하면 안 됩니다. 픽셀 단계에서는 `VAT_UV`가 삼각형 안에서 보간되어 이웃 버텍스의 열을 읽게 됩니다.
+- 노멀 텍스처가 없으면 World Position Offset이 버텍스는 옮기지만 메시는 첫 프레임의 노멀을 유지합니다. 그래서 뒤집히는 메시는 각 면을 첫 프레임 방향 그대로 비춥니다. 예를 들어 위로 돌아온 면이 계속 어둡게 보입니다.
+- 노멀 텍스처 없이 각진 메시를 쓰려면 머티리얼에서 플랫 노멀을 만들 수 있습니다. **Normalize(Cross(DDX(Absolute World Position), DDY(Absolute World Position)))**를 **Normal**에 연결하고(A/B 순서를 지키세요. 반대로 하면 노멀이 안쪽을 향합니다) **Tangent Space Normal**을 끕니다. 모든 삼각형이 평평하게 셰이딩되므로 매끈한 표면은 각져 보입니다.
 
 ### Unity
 
@@ -312,6 +317,9 @@ result = core.encode_vat(
 #     "fbx_path": "C:/output/pCube1_vat/pCube1.fbx",
 #     "width": 8,
 #     "height": 60,
+#     "bounds_extension": {"positive": [x, y, z], "negative": [x, y, z]},
+#     "setup_script_path": "C:/output/pCube1_vat/pCube1_ue_setup.py",  # Unreal만
+#     "warnings": [],              # Encode VAT 대화상자에도 표시되는 메시지
 #     ...
 # }
 ```
@@ -339,6 +347,7 @@ maya_vat/
 +-- core.py          # VAT 인코딩 로직, PNG 저장
 +-- utils.py         # Maya API 유틸리티, VAT UV 생성
 +-- exporter.py      # FBX/OBJ 내보내기
++-- unreal_setup.py  # 언리얼 엔진 셋업 스크립트 작성
 +-- ui.py            # PySide2/6 UI
 ```
 
@@ -372,7 +381,7 @@ maya_vat/
 - 프레임 범위 전체에서 버텍스 수와 순서가 같아야 합니다 (토폴로지가 바뀌는 애니메이션은 지원하지 않음).
 - **Object** space는 변형(스킨, 블렌드셰이프, 디포머)만 기록하고, 오브젝트 자체의 이동/회전/스케일 키는 기록하지 않습니다. Transform만 애니메이션된 메시는 `min`/`max`가 모두 0인 빈 텍스처로 구워집니다. **World** space로 굽거나 디포머로 움직이세요. 움직임이 없는 베이크면 베이커가 경고합니다.
 - 텍스처 가로 크기 = 버텍스 수입니다. 하이폴리 메시라면 대상 엔진의 최대 텍스처 크기를 확인하세요. 한 변이 8192 px을 넘으면 베이커가 경고합니다.
-- 노멀 텍스처는 버텍스마다 노멀을 하나만 저장하므로, 노멀 텍스처를 쓰면 하드 엣지가 부드럽게 보입니다. 하드 엣지를 유지하려면 베이크 전에 Maya에서 그 엣지를 분리하세요(Edit Mesh > Detach). 그러면 양쪽 면이 각자 버텍스를 갖습니다. 메시에 하드 엣지가 있으면 베이커가 경고합니다.
+- 노멀 텍스처는 버텍스마다 노멀을 하나만 저장하므로, 노멀 텍스처를 쓰면 하드 엣지가 부드럽게 보입니다. 하드 엣지를 유지하려면 베이크 전에 Maya에서 그 엣지를 분리하세요(Edit Mesh > Detach). 그러면 양쪽 면이 각자 버텍스를 갖습니다. 두 면 사이에 하드 엣지가 있으면 베이커가 경고합니다.
 
 ---
 

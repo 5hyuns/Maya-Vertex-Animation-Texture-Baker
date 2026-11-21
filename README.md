@@ -2,7 +2,7 @@
 [![Maya](https://img.shields.io/badge/Maya-2022+-00B4FF?style=flat-square&logo=autodesk)](https://www.autodesk.com/products/maya)
 [![Python](https://img.shields.io/badge/Python-Pure-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.1-blue?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-1.3.0-blue?style=flat-square)]()
 
 🌐 English | [한국어](README.ko.md) · 🔗 **[Project Page](https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/)** · ⬇️ **[Download](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)**
 
@@ -114,7 +114,7 @@ With this ON, the first frame is still used as the proxy (rest) pose but is left
 
 | Option | Description |
 |--------|-------------|
-| **Export Normals (separate texture)** | Also writes `<mesh>_vnrm.png` |
+| **Export Normals (separate texture)** | Also writes `<mesh>_vnrm.png`. On by default. Without it the engine keeps the first-frame normals, so a mesh that turns or bends keeps its first-frame lighting; the baker warns when that happens. |
 | **Export Mesh (FBX)** | Exports the proxy mesh at the first frame |
 | **UV Set Name** / **Overwrite if exists** | Name of the VAT UV set to create. With overwrite on, an existing set is deleted and regenerated. **Create VAT UV** creates only the UV set. |
 
@@ -129,6 +129,7 @@ output_dir/
     +-- <mesh>_vnrm.png      # Normal texture (optional)
     +-- <mesh>_remap.json    # Min/max bounds for decoding
     +-- <mesh>.fbx           # Proxy mesh (optional)
+    +-- <mesh>_ue_setup.py   # Unreal Engine setup script (Unreal target only)
 ```
 
 `:` and `|` in mesh names are replaced with `_`.
@@ -233,13 +234,15 @@ Texture import settings:
 
 Bake with **Target Engine = Unreal Engine**.
 
+**Setup script (`<mesh>_ue_setup.py`):** import the FBX and the textures into one Content Browser folder, select the static mesh, and run the script (Tools > Execute Python Script). It applies every setting below and builds `M_<mesh>_VAT` with the nodes described in this section, then assigns it to the mesh. Where the engine's Python cannot connect **World Position Offset** (Unreal Engine 5.4, for example), the node to connect is marked "Connect to World Position Offset"; connect that one pin by hand. The rest of this section describes the same setup for doing it by hand.
+
 **FBX import (Static Mesh):** keep **Convert Scene** on and **Force Front XAxis** off (the defaults; in the Interchange importer they are under the `...` menu next to the source file).
 
 **Static Mesh editor:**
 
 - **Build Settings > Use Full Precision UVs: on.** Unreal stores UVs as 16-bit floats by default, which cannot address single pixels once the texture is wider than about 1000 vertices. Vertices then read their neighbors' columns and the mesh tears.
-- **Nanite: off.**
-- Raise **Positive / Negative Bounds Extension** (or the component's Bounds Scale) to cover the motion range, otherwise the mesh is culled while it moves.
+- **Nanite: off.** With Nanite on, the bounds extension below does not cover the World Position Offset: without it the moving mesh leaves shadow trails on the ground (Virtual Shadow Maps, the UE5 default), and with it the shadow disappears.
+- **Positive Bounds Extension = `position.max`** and **Negative Bounds Extension = `position.min` with the sign flipped** (from `remap.json`; the Encode VAT dialog shows both). Unreal computes the bounds from the first-frame pose, and these values make them cover every vertex in every frame. With smaller bounds the mesh is culled while it moves, and its shadow is only drawn near the first-frame pose. Reopen the level after changing the bounds or Nanite to clear shadows cached before the change.
 
 **Textures (`_vat.png`, `_vnrm.png`):**
 
@@ -261,6 +264,8 @@ return lerp(BoundsMin, BoundsMax, enc);
 - `Frames`, `BoundsMin`, `BoundsMax` come from `remap.json` (`position.frames`, `position.min`, `position.max`). Type the values into the `BoundsMin`/`BoundsMax` constants; if both stay 0, the mesh does not move. `Frame` can be `fmod(Time * FPS, Frames)`.
 - With an **Object** space bake, connect the result through **TransformVector (Local Space → World Space)** to **World Position Offset**. With a **World** space bake, connect it directly.
 - Normals: decode them in the vertex stage. Use a second Custom node with the same code on `_vnrm.png` and `BoundsMin = -1`, `BoundsMax = 1` (this gives `rgb * 2 - 1`). With an Object space bake, transform the result Local → World. Pass it through a **VertexInterpolator** node, connect the interpolator output to **Normal**, and turn off **Tangent Space Normal** in the material details. Do not sample the normal texture in the pixel stage: `VAT_UV` is interpolated across each triangle there, so the lookup reads neighboring vertices' columns.
+- Without the normal texture, World Position Offset moves the vertices but the mesh keeps its first-frame normals. A mesh that turns over then lights each face as it faced on the first frame, for example a face that turns up stays dark.
+- For a hard-edged mesh without a normal texture, flat normals can come from the material instead: connect **Normalize(Cross(DDX(Absolute World Position), DDY(Absolute World Position)))** to **Normal** (keep this A/B order; the reverse points the normals inward) and turn off **Tangent Space Normal**. Every triangle is then lit flat, so smooth surfaces look faceted.
 
 ### Unity
 
@@ -312,6 +317,9 @@ result = core.encode_vat(
 #     "fbx_path": "C:/output/pCube1_vat/pCube1.fbx",
 #     "width": 8,
 #     "height": 60,
+#     "bounds_extension": {"positive": [x, y, z], "negative": [x, y, z]},
+#     "setup_script_path": "C:/output/pCube1_vat/pCube1_ue_setup.py",  # Unreal only
+#     "warnings": [],              # Messages also shown in the Encode VAT dialog
 #     ...
 # }
 ```
@@ -339,6 +347,7 @@ maya_vat/
 +-- core.py          # VAT encoding logic, PNG writer
 +-- utils.py         # Maya API utilities, VAT UV creation
 +-- exporter.py      # FBX/OBJ export
++-- unreal_setup.py  # Writes the Unreal Engine setup script
 +-- ui.py            # PySide2/6 UI
 ```
 
@@ -372,7 +381,7 @@ maya_vat/
 - The vertex count and order must stay the same for the whole frame range (topology-changing animation is not supported).
 - **Object** space records only deformation (skin, blend shapes, deformers), not the object's own translate/rotate/scale keys. A mesh animated only by its transform bakes to an empty texture with `min`/`max` all 0. Bake it in **World** space, or move it with a deformer. The baker warns when the bake has no motion.
 - Texture width equals the vertex count. Check your target engine's maximum texture size for high-poly meshes. The baker warns when a side exceeds 8192 px.
-- The normal texture stores one normal per vertex, so hard edges render smooth when you use it. To keep a hard edge, split it in Maya before baking (Edit Mesh > Detach), so each side gets its own vertex. The baker warns when the mesh has hard edges.
+- The normal texture stores one normal per vertex, so hard edges render smooth when you use it. To keep a hard edge, split it in Maya before baking (Edit Mesh > Detach), so each side gets its own vertex. The baker warns when the mesh has hard edges between two faces.
 
 ---
 

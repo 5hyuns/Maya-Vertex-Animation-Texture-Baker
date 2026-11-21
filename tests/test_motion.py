@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Regression tests for position bounds, the empty-bake warning and the
-animation-free proxy FBX.
+Regression tests for position bounds, the bake warnings, the animation-free
+proxy FBX and the Unreal setup script.
 
 Run with Maya's Python interpreter from the repo root:
     mayapy tests/test_motion.py
@@ -39,10 +39,13 @@ core = maya_vat.core
 MESH = 'box'
 
 
-def _new_cube():
+def _new_cube(hard_edges=False):
     cmds.file(new=True, force=True)
     cmds.playbackOptions(min=1, max=11)
-    return cmds.polyCube(name=MESH)[0]
+    cube = cmds.polyCube(name=MESH)[0]
+    if not hard_edges:
+        cmds.polySoftEdge(cube, angle=180, constructionHistory=False)
+    return cube
 
 
 def _key(node, attr, v0, v1):
@@ -54,6 +57,11 @@ def scene_transform():
     box = _new_cube()
     _key(box, 'translateY', 0, 5)
     _key(box, 'rotateY', 0, 90)
+
+
+def scene_translate():
+    box = _new_cube()
+    _key(box, 'translateX', 0, 5)
 
 
 def scene_static():
@@ -140,6 +148,134 @@ class MotionTest(unittest.TestCase):
                 self.assertEqual(span, 0.0)
                 self.assertEqual(len(result['warnings']), 1)
                 self.assertIn('does not move', result['warnings'][0])
+
+
+
+class NormalWarningTest(unittest.TestCase):
+    """Without a normal texture the engine keeps the first-frame normals"""
+
+    def setUp(self):
+        self.out = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.out, ignore_errors=True)
+
+    def bake(self, scene, world, include_normals=False):
+        scene()
+        return core.encode_vat(MESH, self.out, include_normals=include_normals,
+                               export_mesh=False, use_world_space=world)
+
+    def test_turning_mesh_without_normals_warns(self):
+        result = self.bake(scene_transform, True)
+        self.assertEqual(len(result['warnings']), 1)
+        self.assertIn('Export Normals', result['warnings'][0])
+
+    def test_bending_mesh_without_normals_warns(self):
+        for scene in (scene_cluster, scene_skin):
+            for world in (False, True):
+                with self.subTest(scene=scene.__name__, world=world):
+                    result = self.bake(scene, world)
+                    self.assertEqual(len(result['warnings']), 1)
+                    self.assertIn('Export Normals', result['warnings'][0])
+
+    def test_moving_mesh_without_normals_does_not_warn(self):
+        result = self.bake(scene_translate, True)
+        self.assertEqual(result['warnings'], [])
+
+    def test_object_space_ignores_transform_rotation(self):
+        # The engine applies the object's own rotation to the normals at runtime
+        result = self.bake(scene_transform, False)
+        self.assertEqual(len(result['warnings']), 1)
+        self.assertNotIn('Export Normals', result['warnings'][0])
+
+    def test_hard_edges_with_normals_warn(self):
+        def scene():
+            box = _new_cube(hard_edges=True)
+            _key(box, 'rotateY', 0, 90)
+        result = self.bake(scene, True, include_normals=True)
+        self.assertEqual(len(result['warnings']), 1)
+        self.assertIn('hard edge', result['warnings'][0])
+
+    def test_detached_hard_edges_do_not_warn(self):
+        def scene():
+            box = _new_cube(hard_edges=True)
+            cmds.polySplitEdge(box + '.e[*]')
+            _key(box, 'rotateY', 0, 90)
+        result = self.bake(scene, True, include_normals=True)
+        self.assertEqual(result['warnings'], [])
+
+
+class BoundsAndUnrealScriptTest(unittest.TestCase):
+
+    def setUp(self):
+        self.out = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.out, ignore_errors=True)
+
+    def test_bounds_extension_covers_min_max(self):
+        scene_transform()
+        result = core.encode_vat(MESH, self.out, export_mesh=False,
+                                 use_world_space=True, target_engine='unreal')
+        with open(result['json_path']) as f:
+            position = json.load(f)['position']
+        extension = result['bounds_extension']
+        for axis in range(3):
+            self.assertEqual(extension['positive'][axis],
+                             max(0.0, position['max'][axis]))
+            self.assertEqual(extension['negative'][axis],
+                             max(0.0, -position['min'][axis]))
+            self.assertGreaterEqual(extension['positive'][axis], 0.0)
+            self.assertGreaterEqual(extension['negative'][axis], 0.0)
+
+    def _script_constants(self, path):
+        with open(path) as f:
+            source = f.read()
+        compile(source, path, 'exec')
+        constants = {}
+        # Only the constants header runs outside Unreal
+        exec(source.split('\nimport unreal\n')[0], constants)
+        return constants
+
+    def test_unreal_bake_writes_setup_script(self):
+        for world, include_normals in ((True, True), (False, False)):
+            with self.subTest(world=world, include_normals=include_normals):
+                scene_skin()
+                cmds.currentUnit(time='ntsc', updateAnimation=False)
+                result = core.encode_vat(
+                    MESH, self.out, include_normals=include_normals,
+                    export_mesh=False, use_world_space=world,
+                    target_engine='unreal')
+                with open(result['json_path']) as f:
+                    position = json.load(f)['position']
+                c = self._script_constants(result['setup_script_path'])
+                self.assertEqual(c['MESH'], MESH)
+                self.assertEqual(c['POSITION_TEXTURE'], MESH + '_vat')
+                self.assertEqual(c['NORMAL_TEXTURE'],
+                                 MESH + '_vnrm' if include_normals else None)
+                self.assertEqual(c['SPACE'], 'world' if world else 'object')
+                self.assertEqual(c['VAT_UV_INDEX'], 1)
+                self.assertEqual(c['FRAMES'], position['frames'])
+                self.assertAlmostEqual(c['FPS'], 30.0, places=3)
+                for axis in range(3):
+                    self.assertAlmostEqual(c['BOUNDS_MIN'][axis],
+                                           position['min'][axis], places=5)
+                    self.assertAlmostEqual(c['BOUNDS_MAX'][axis],
+                                           position['max'][axis], places=5)
+                    self.assertAlmostEqual(
+                        c['POSITIVE_BOUNDS_EXTENSION'][axis],
+                        result['bounds_extension']['positive'][axis], places=5)
+
+    def test_other_engines_write_no_setup_script(self):
+        for engine in ('playcanvas', 'unity'):
+            with self.subTest(engine=engine):
+                scene_skin()
+                result = core.encode_vat(MESH, self.out, export_mesh=False,
+                                         target_engine=engine)
+                self.assertIsNone(result['setup_script_path'])
+                self.assertFalse(any(name.endswith('_ue_setup.py')
+                                     for _, _, files in os.walk(self.out)
+                                     for name in files))
 
 
 if __name__ == '__main__':

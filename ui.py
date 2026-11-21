@@ -3,6 +3,8 @@
 Maya VAT - User Interface
 """
 
+import math
+
 import maya.cmds as cmds
 from maya import OpenMayaUI as omui
 
@@ -17,6 +19,12 @@ from . import core, utils
 
 # Window instance
 _window = None
+
+
+def _format_extension(values):
+    """X/Y/Z rounded up to 0.1, so typed-in values still cover the motion"""
+    return "X {:.1f}, Y {:.1f}, Z {:.1f}".format(
+        *(math.ceil(v * 10.0 - 1e-6) / 10.0 for v in values))
 
 
 def get_maya_main_window():
@@ -99,6 +107,8 @@ class OpenVATWindow(QtWidgets.QDialog):
             "Unity: Y-up left-handed, meters"
         )
         self.normals_check = QtWidgets.QCheckBox("Export Normals (separate texture)")
+        # Without normals a mesh that turns or bends keeps its first-frame lighting
+        self.normals_check.setChecked(True)
         self.export_mesh_check = QtWidgets.QCheckBox("Export Mesh (FBX)")
         self.export_mesh_check.setChecked(True)
 
@@ -423,6 +433,17 @@ class OpenVATWindow(QtWidgets.QDialog):
                             else QtWidgets.QMessageBox.information)
                 warning_str = "".join(
                     "\n\nWarning: {}".format(w) for w in warnings or [])
+                unreal_str = ""
+                if result.get("setup_script_path"):
+                    extension = result["bounds_extension"]
+                    unreal_str = (
+                        "\n\nStatic Mesh bounds (the setup script sets them):\n"
+                        "  Positive Bounds Extension: {}\n"
+                        "  Negative Bounds Extension: {}\n"
+                        "Unreal setup script: {}".format(
+                            _format_extension(extension["positive"]),
+                            _format_extension(extension["negative"]),
+                            result["setup_script_path"]))
                 show_box(
                     self,
                     "Completed with warnings" if warnings else "Success",
@@ -432,7 +453,7 @@ class OpenVATWindow(QtWidgets.QDialog):
                     "Space: {}\n"
                     "Skip First Frame: {}\n"
                     "UV Set: {} ({})\n"
-                    "Output: {}{}".format(
+                    "Output: {}{}{}".format(
                         result["width"],
                         result["height"],
                         self.engine_combo.currentText(),
@@ -441,6 +462,7 @@ class OpenVATWindow(QtWidgets.QDialog):
                         uv_set_name,
                         uv_status,
                         result["png_path"],
+                        unreal_str,
                         warning_str
                     )
                 )
