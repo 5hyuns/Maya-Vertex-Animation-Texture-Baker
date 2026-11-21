@@ -36,6 +36,9 @@ A free, open-source **Maya VAT baker** — bake skeletal (skinCluster), blend sh
 - **Auto VAT UV Generation** - Automatic UV assignment based on vertex ID
 - **Skip First Frame** - Option to exclude T-Pose
 - **One-Click Export** - Batch generation of PNG + JSON + FBX
+- **Normals by Default** - The normal texture keeps lighting right on meshes that turn or bend
+- **Unreal Setup Script** - One script sets the texture and mesh settings and builds the VAT material, with shadows that follow the motion (Nanite on or off)
+- **Bake Checks** - Warns about motionless bakes, missing normals, hard edges and textures too wide for engines
 
 ---
 

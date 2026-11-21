@@ -302,9 +302,10 @@
         <div><dt>Object or World space</dt><dd>Object space keeps runtime movement and rotation working. World space suits static props.</dd></div>
         <div><dt>Auto VAT UVs</dt><dd>Generates a dedicated UV set that maps each vertex to its texture column.</dd></div>
         <div><dt>Skip first frame</dt><dd>Use a T-pose or bind pose as the reference mesh without baking it into the animation.</dd></div>
-        <div><dt>One-click export</dt><dd>Position PNG, optional normal PNG, bounds JSON and a skin-free proxy FBX.</dd></div>
+        <div><dt>One-click export</dt><dd>Position PNG, normal PNG (on by default), bounds JSON and a skin-free proxy FBX.</dd></div>
         <div><dt>Per-engine output</dt><dd>Pick PlayCanvas, Unreal Engine or Unity. Axes, units and normals are written to match that engine's FBX import.</dd></div>
-        <div><dt>Bake checks</dt><dd>Warns before baking when the texture gets too wide for engines or when hard edges will render smooth.</dd></div>
+        <div><dt>Unreal setup script</dt><dd>Run one generated Python file in the Unreal Editor: texture and mesh settings, bounds and a ready VAT material. Shadows follow the motion with Nanite on or off.</dd></div>
+        <div><dt>Bake checks</dt><dd>Warns when the texture gets too wide for engines, when hard edges will render smooth, when a bake has no motion, and when a turning mesh has no normals.</dd></div>
       </dl>
     </div>
   </section>
@@ -350,7 +351,8 @@ maya_vat.show()</code></pre>
   mesh_vat.png      <span class="c"># position deltas (width = vertices, height = frames)</span>
   mesh_vnrm.png     <span class="c"># normals (optional)</span>
   mesh_remap.json   <span class="c"># bounds min/max for decoding</span>
-  mesh.fbx          <span class="c"># proxy mesh, first frame, VAT_UV set</span></code></pre>
+  mesh.fbx          <span class="c"># proxy mesh, first frame, VAT_UV set</span>
+  mesh_ue_setup.py  <span class="c"># Unreal setup script (Unreal target)</span></code></pre>
           <ul class="notes">
             <li>Texture import: point filtering, no mipmaps, no sRGB, no compression.</li>
             <li>Flip V if your engine loads textures bottom-up.</li>
@@ -377,7 +379,7 @@ n.x = -n.x;   <span class="c">// undo the PlayCanvas X flip if needed</span></co
       <table class="engines">
         <thead><tr><th scope="col">Engine</th><th scope="col">How</th></tr></thead>
         <tbody>
-          <tr><th scope="row">Unreal Engine</th><td>Bake with Target Engine = Unreal. Material World Position Offset reading the VAT texture (point sampling, no compression/sRGB, Full Precision UVs). Decode normals in the vertex stage through a VertexInterpolator.</td></tr>
+          <tr><th scope="row">Unreal Engine</th><td>Bake with Target Engine = Unreal, then run the generated <code>mesh_ue_setup.py</code> in the editor. It applies point sampling, no compression/sRGB, Full Precision UVs and the bounds extension, and builds a World Position Offset material with vertex-stage normals and Max World Position Offset Displacement so shadows follow the motion.</td></tr>
           <tr><th scope="row">Unity</th><td>Bake with Target Engine = Unity (meters). Shader Graph / HLSL vertex stage, sample with <code>tex2Dlod</code> and read frame rows from the top.</td></tr>
           <tr><th scope="row">PlayCanvas / three.js / WebGL</th><td>Default target (Maya axes). Custom vertex shader chunk. Normal X is pre-flipped for PlayCanvas.</td></tr>
         </tbody>
