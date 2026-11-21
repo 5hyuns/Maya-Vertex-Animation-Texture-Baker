@@ -62,7 +62,10 @@ def export_fbx(mesh_name, output_dir, base_name=None, unit=None):
     if unit:
         mel.eval('FBXExportConvertUnitString {}'.format(unit))
 
-    # Animation off
+    # Animation off. The proxy is a static mesh at the current pose; keyed
+    # transforms would otherwise be written as animation curves, which makes
+    # engines import an animated (Unreal: skeletal) mesh.
+    mel.eval('FBXProperty "Export|IncludeGrp|Animation" -v false')
     mel.eval('FBXExportBakeComplexAnimation -v false')
     mel.eval('FBXExportAnimationOnly -v false')
     mel.eval('FBXExportApplyConstantKeyReducer -v false')

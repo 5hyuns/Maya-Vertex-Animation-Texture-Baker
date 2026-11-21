@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Regression tests for position bounds and the empty-bake warning.
+Regression tests for position bounds, the empty-bake warning and the
+animation-free proxy FBX.
 
 Run with Maya's Python interpreter from the repo root:
     mayapy tests/test_motion.py
@@ -122,6 +123,15 @@ class MotionTest(unittest.TestCase):
         result, span = self.bake(scene_transform, True)
         self.assertGreater(span, 0.0)
         self.assertEqual(result['warnings'], [])
+
+    def test_fbx_has_no_animation(self):
+        scene_transform()
+        result = core.encode_vat(MESH, self.out, export_mesh=True,
+                                 use_world_space=True, target_engine='unreal')
+        with open(result['fbx_path'], 'rb') as f:
+            self.assertEqual(f.read().count(b'AnimationCurveNode'), 0)
+        # The scene keeps its keys
+        self.assertEqual(cmds.keyframe(MESH, query=True, keyframeCount=True), 4)
 
     def test_static_mesh_warns(self):
         for world in (False, True):
