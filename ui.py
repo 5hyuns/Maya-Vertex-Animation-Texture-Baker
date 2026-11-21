@@ -418,16 +418,21 @@ class OpenVATWindow(QtWidgets.QDialog):
                         "Status: '{}' created".format(uv_set_name)
                     )
 
-                QtWidgets.QMessageBox.information(
+                warnings = result.get("warnings")
+                show_box = (QtWidgets.QMessageBox.warning if warnings
+                            else QtWidgets.QMessageBox.information)
+                warning_str = "".join(
+                    "\n\nWarning: {}".format(w) for w in warnings or [])
+                show_box(
                     self,
-                    "Success",
+                    "Completed with warnings" if warnings else "Success",
                     "VAT encoding complete!\n\n"
                     "Texture: {} x {}\n"
                     "Target Engine: {}\n"
                     "Space: {}\n"
                     "Skip First Frame: {}\n"
                     "UV Set: {} ({})\n"
-                    "Output: {}".format(
+                    "Output: {}{}".format(
                         result["width"],
                         result["height"],
                         self.engine_combo.currentText(),
@@ -435,7 +440,8 @@ class OpenVATWindow(QtWidgets.QDialog):
                         skip_str,
                         uv_set_name,
                         uv_status,
-                        result["png_path"]
+                        result["png_path"],
+                        warning_str
                     )
                 )
         except Exception as e:

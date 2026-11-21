@@ -2,7 +2,7 @@
 [![Maya](https://img.shields.io/badge/Maya-2022+-00B4FF?style=flat-square&logo=autodesk)](https://www.autodesk.com/products/maya)
 [![Python](https://img.shields.io/badge/Python-Pure-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.0-blue?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-1.2.1-blue?style=flat-square)]()
 
 🌐 [English](README.md) | 한국어 · 🔗 **[프로젝트 페이지](https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/)** · ⬇️ **[다운로드](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)**
 
@@ -258,7 +258,7 @@ float3 enc = Texture2DSampleLevel(VatTex, VatTexSampler, uv, 0).rgb;
 return lerp(BoundsMin, BoundsMax, enc);
 ```
 
-- `Frames`, `BoundsMin`, `BoundsMax`는 `remap.json`의 `position.frames`, `position.min`, `position.max`입니다. `Frame`은 `fmod(Time * FPS, Frames)`처럼 만들 수 있습니다.
+- `Frames`, `BoundsMin`, `BoundsMax`는 `remap.json`의 `position.frames`, `position.min`, `position.max`입니다. 이 값을 `BoundsMin`/`BoundsMax` 상수에 입력하세요. 둘 다 0이면 메시가 움직이지 않습니다. `Frame`은 `fmod(Time * FPS, Frames)`처럼 만들 수 있습니다.
 - **Object** space로 구웠다면 결과를 **TransformVector (Local Space → World Space)**를 거쳐 **World Position Offset**에 연결합니다. **World** space로 구웠다면 바로 연결합니다.
 - 노멀: 버텍스 단계에서 디코딩합니다. 같은 코드의 Custom 노드를 하나 더 만들어 `_vnrm.png`에 연결하고 `BoundsMin = -1`, `BoundsMax = 1`로 둡니다(`rgb * 2 - 1`과 같음). Object 스페이스로 베이크했다면 결과를 Local → World로 변환합니다. 그 값을 **VertexInterpolator** 노드에 통과시키고, 인터폴레이터 출력을 **Normal**에 연결한 뒤 머티리얼 디테일에서 **Tangent Space Normal**을 끕니다. 노멀 텍스처를 픽셀 단계에서 샘플링하면 안 됩니다. 픽셀 단계에서는 `VAT_UV`가 삼각형 안에서 보간되어 이웃 버텍스의 열을 읽게 됩니다.
 
@@ -370,6 +370,7 @@ maya_vat/
 ### 제한 사항
 
 - 프레임 범위 전체에서 버텍스 수와 순서가 같아야 합니다 (토폴로지가 바뀌는 애니메이션은 지원하지 않음).
+- **Object** space는 변형(스킨, 블렌드셰이프, 디포머)만 기록하고, 오브젝트 자체의 이동/회전/스케일 키는 기록하지 않습니다. Transform만 애니메이션된 메시는 `min`/`max`가 모두 0인 빈 텍스처로 구워집니다. **World** space로 굽거나 디포머로 움직이세요. 움직임이 없는 베이크면 베이커가 경고합니다.
 - 텍스처 가로 크기 = 버텍스 수입니다. 하이폴리 메시라면 대상 엔진의 최대 텍스처 크기를 확인하세요. 한 변이 8192 px을 넘으면 베이커가 경고합니다.
 - 노멀 텍스처는 버텍스마다 노멀을 하나만 저장하므로, 노멀 텍스처를 쓰면 하드 엣지가 부드럽게 보입니다. 하드 엣지를 유지하려면 베이크 전에 Maya에서 그 엣지를 분리하세요(Edit Mesh > Detach). 그러면 양쪽 면이 각자 버텍스를 갖습니다. 메시에 하드 엣지가 있으면 베이커가 경고합니다.
 

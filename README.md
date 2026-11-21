@@ -2,7 +2,7 @@
 [![Maya](https://img.shields.io/badge/Maya-2022+-00B4FF?style=flat-square&logo=autodesk)](https://www.autodesk.com/products/maya)
 [![Python](https://img.shields.io/badge/Python-Pure-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.0-blue?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-1.2.1-blue?style=flat-square)]()
 
 🌐 English | [한국어](README.ko.md) · 🔗 **[Project Page](https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/)** · ⬇️ **[Download](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)**
 
@@ -258,7 +258,7 @@ float3 enc = Texture2DSampleLevel(VatTex, VatTexSampler, uv, 0).rgb;
 return lerp(BoundsMin, BoundsMax, enc);
 ```
 
-- `Frames`, `BoundsMin`, `BoundsMax` come from `remap.json` (`position.frames`, `position.min`, `position.max`). `Frame` can be `fmod(Time * FPS, Frames)`.
+- `Frames`, `BoundsMin`, `BoundsMax` come from `remap.json` (`position.frames`, `position.min`, `position.max`). Type the values into the `BoundsMin`/`BoundsMax` constants; if both stay 0, the mesh does not move. `Frame` can be `fmod(Time * FPS, Frames)`.
 - With an **Object** space bake, connect the result through **TransformVector (Local Space → World Space)** to **World Position Offset**. With a **World** space bake, connect it directly.
 - Normals: decode them in the vertex stage. Use a second Custom node with the same code on `_vnrm.png` and `BoundsMin = -1`, `BoundsMax = 1` (this gives `rgb * 2 - 1`). With an Object space bake, transform the result Local → World. Pass it through a **VertexInterpolator** node, connect the interpolator output to **Normal**, and turn off **Tangent Space Normal** in the material details. Do not sample the normal texture in the pixel stage: `VAT_UV` is interpolated across each triangle there, so the lookup reads neighboring vertices' columns.
 
@@ -370,6 +370,7 @@ maya_vat/
 ### Limitations
 
 - The vertex count and order must stay the same for the whole frame range (topology-changing animation is not supported).
+- **Object** space records only deformation (skin, blend shapes, deformers), not the object's own translate/rotate/scale keys. A mesh animated only by its transform bakes to an empty texture with `min`/`max` all 0. Bake it in **World** space, or move it with a deformer. The baker warns when the bake has no motion.
 - Texture width equals the vertex count. Check your target engine's maximum texture size for high-poly meshes. The baker warns when a side exceeds 8192 px.
 - The normal texture stores one normal per vertex, so hard edges render smooth when you use it. To keep a hard edge, split it in Maya before baking (Edit Mesh > Detach), so each side gets its own vertex. The baker warns when the mesh has hard edges.
 

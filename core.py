@@ -31,6 +31,9 @@ TARGET_ENGINES = ('playcanvas', 'unreal', 'unity')
 # Unity's importer converts the file to meters with Convert Units on.
 _UNITY_SCALE = 0.01
 
+# Below this (cm, or matrix element difference) a bake counts as motionless
+_MOTION_TOLERANCE = 1e-6
+
 
 def _swizzle(v, target_engine, z_up):
     x, y, z = v
@@ -154,6 +157,11 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
         bake_nrm_matrix = utils.normal_matrix(bake_matrix)
     world_normals = target_engine == 'unreal' and use_world_space
 
+    # Object space leaves out the object's own transform, so track whether the
+    # transform moves to explain an empty bake
+    proxy_matrix = utils.get_world_matrix(mesh_name)
+    transform_moves = False
+
     # Step 2: Collect all frame positions and calculate deltas
     all_deltas = {}
     all_normals = {} if include_normals else None
@@ -161,6 +169,9 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
     for frame in range(frame_start, frame_end + 1):
         utils.set_current_frame(frame)
         positions = utils.get_vertex_positions(mesh_name, use_world_space)
+        if not transform_moves:
+            transform_moves = not utils.get_world_matrix(mesh_name).isEquivalent(
+                proxy_matrix, _MOTION_TOLERANCE)
 
         # Calculate delta from proxy
         deltas = []
@@ -184,6 +195,24 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
 
     # Step 3: Find min/max for remapping
     min_x, min_y, min_z, max_x, max_y, max_z = utils.find_min_max(all_deltas)
+
+    # All-zero bounds give a black position texture that plays no animation
+    warnings = []
+    if max(max_x - min_x, max_y - min_y, max_z - min_z) <= _MOTION_TOLERANCE:
+        if transform_moves and not use_world_space:
+            message = (
+                "'{}' has no vertex motion in Object space: its animation is on "
+                "the object's transform (translate/rotate/scale), which Object "
+                "space does not record. Bake in World space, or animate the "
+                "mesh with a deformer (skin, blend shape, cluster, etc.)."
+                .format(mesh_name))
+        else:
+            message = (
+                "'{}' does not move between frames {} and {}. The position "
+                "texture is empty (remap min/max are 0)."
+                .format(mesh_name, frame_start, frame_end))
+        warnings.append(message)
+        cmds.warning(message)
 
     # Step 4: Create image data (width=num_verts, height=num_frames)
     width = num_verts
@@ -284,7 +313,8 @@ def encode_vat(mesh_name, output_dir, frame_start=None, frame_end=None,
         "target_engine": target_engine,
         "uv_set_name": uv_set_name,
         "uv_created": uv_result.get('created', False),
-        "uv_skipped": uv_result.get('skipped', False)
+        "uv_skipped": uv_result.get('skipped', False),
+        "warnings": warnings
     }
 
 
