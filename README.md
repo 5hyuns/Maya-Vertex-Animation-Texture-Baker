@@ -2,7 +2,7 @@
 [![Maya](https://img.shields.io/badge/Maya-2022+-00B4FF?style=flat-square&logo=autodesk)](https://www.autodesk.com/products/maya)
 [![Python](https://img.shields.io/badge/Python-Pure-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.3.0-blue?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-1.3.1-blue?style=flat-square)]()
 
 🌐 English | [한국어](README.ko.md) · 🔗 **[Project Page](https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/)** · ⬇️ **[Download](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)**
 
@@ -378,6 +378,8 @@ maya_vat/
 - Skinning-free (VAT replaces skeletal deformation)
 - Excludes blend shapes
 - Excludes animation (first frame only)
+- Holds the mesh as it looks at the start frame, even when the range starts away from the bind pose
+- Keeps the mesh's parent groups and node names. For a referenced character, only the top group loses its namespace (`ch:rig` becomes `rig`); the mesh keeps its name, for example `ch:body`
 - Unreal and Unity targets write the file in centimeters
 
 ### Limitations

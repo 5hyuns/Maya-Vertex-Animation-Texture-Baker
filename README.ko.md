@@ -2,7 +2,7 @@
 [![Maya](https://img.shields.io/badge/Maya-2022+-00B4FF?style=flat-square&logo=autodesk)](https://www.autodesk.com/products/maya)
 [![Python](https://img.shields.io/badge/Python-Pure-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.3.0-blue?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-1.3.1-blue?style=flat-square)]()
 
 🌐 [English](README.md) | 한국어 · 🔗 **[프로젝트 페이지](https://5hyuns.github.io/Maya-Vertex-Animation-Texture-Baker/)** · ⬇️ **[다운로드](https://github.com/5hyuns/Maya-Vertex-Animation-Texture-Baker/releases/latest)**
 
@@ -378,6 +378,8 @@ maya_vat/
 - 스킨/본 제외 (VAT는 스킨 불필요)
 - 블렌드쉐입 제외
 - 애니메이션 제외 (첫 프레임만)
+- 시작 프레임이 바인드 포즈가 아니어도 시작 프레임의 포즈 그대로 내보냅니다
+- 메시의 부모 그룹과 노드 이름을 그대로 유지합니다. 레퍼런스 캐릭터는 맨 위 그룹만 네임스페이스가 빠지고(`ch:rig` → `rig`), 메시는 이름을 그대로 유지합니다(예: `ch:body`)
 - Unreal과 Unity 타깃은 센티미터로 씁니다
 
 ### 제한 사항

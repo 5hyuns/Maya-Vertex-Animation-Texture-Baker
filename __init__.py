@@ -9,10 +9,10 @@ Usage:
     maya_vat.show()
 
 Author: 555hyuns@gmail.com
-Version: 1.3.0
+Version: 1.3.1
 """
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 __author__ = "555hyuns@gmail.com"
 
 from .ui import show

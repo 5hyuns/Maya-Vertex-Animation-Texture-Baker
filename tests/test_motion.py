@@ -35,6 +35,7 @@ maya_vat = importlib.util.module_from_spec(_spec)
 sys.modules['maya_vat'] = maya_vat
 _spec.loader.exec_module(maya_vat)
 core = maya_vat.core
+utils = maya_vat.utils
 
 MESH = 'box'
 
@@ -140,6 +141,79 @@ class MotionTest(unittest.TestCase):
             self.assertEqual(f.read().count(b'AnimationCurveNode'), 0)
         # The scene keeps its keys
         self.assertEqual(cmds.keyframe(MESH, query=True, keyframeCount=True), 4)
+
+    def test_fbx_holds_start_frame_pose(self):
+        # Start the bake where the skin is away from its bind pose
+        for scene in (scene_skin, scene_blend):
+            for engine in core.TARGET_ENGINES:
+                with self.subTest(scene=scene.__name__, engine=engine):
+                    scene()
+                    cmds.currentTime(6)
+                    expected = utils.get_vertex_positions(MESH, True)
+                    nodes = set(cmds.ls(dag=True, long=True))
+                    result = core.encode_vat(MESH, self.out, frame_start=6,
+                                             frame_end=11, export_mesh=True,
+                                             target_engine=engine)
+                    # The export leaves no copy behind and keeps the mesh name
+                    self.assertEqual(set(cmds.ls(dag=True, long=True)), nodes)
+                    cmds.file(new=True, force=True)
+                    cmds.file(result['fbx_path'], i=True, type='FBX')
+                    self.assertTrue(cmds.objExists(MESH))
+                    self.assertIn('VAT_UV', utils.get_uv_set_names(MESH))
+                    got = utils.get_vertex_positions(MESH, True)
+                    self.assertEqual(len(got), len(expected))
+                    for p, q in zip(got, expected):
+                        for axis in range(3):
+                            self.assertAlmostEqual(p[axis], q[axis], places=4)
+
+    def test_fbx_keeps_hierarchy_and_names(self):
+        # A skinned mesh inside a moved group, used as is and as a reference
+        scene_skin()
+        group = cmds.group(MESH, cmds.ls(type='joint')[0], name='rig')
+        cmds.move(0, 3, 0, group)
+        rig_file = os.path.join(self.out, 'rig.ma')
+        cmds.file(rename=rig_file)
+        cmds.file(save=True, type='mayaAscii')
+        for referenced in (False, True):
+            with self.subTest(referenced=referenced):
+                cmds.file(new=True, force=True)
+                cmds.playbackOptions(min=1, max=11)
+                prefix = 'ch:' if referenced else ''
+                if referenced:
+                    cmds.file(rig_file, reference=True, namespace='ch')
+                else:
+                    cmds.file(rig_file, i=True)
+                mesh = prefix + MESH
+                cmds.currentTime(6)
+                expected = utils.get_vertex_positions(mesh, True)
+                nodes = set(cmds.ls(dag=True, long=True))
+                namespaces = cmds.namespaceInfo(':', listOnlyNamespaces=True)
+                result = core.encode_vat(mesh, self.out, frame_start=6,
+                                         frame_end=11, export_mesh=True,
+                                         target_engine='unreal')
+                # The scene is back as it was, without reference edits
+                self.assertEqual(set(cmds.ls(dag=True, long=True)), nodes)
+                self.assertEqual(
+                    cmds.namespaceInfo(':', listOnlyNamespaces=True), namespaces)
+                if referenced:
+                    node = cmds.referenceQuery(mesh, referenceNode=True)
+                    self.assertFalse(any(
+                        '_vat_source' in e or e.startswith('parent')
+                        for e in cmds.referenceQuery(node, editStrings=True) or []))
+                cmds.file(new=True, force=True)
+                cmds.file(result['fbx_path'], i=True, type='FBX')
+                cameras = set(cmds.listRelatives(
+                    cmds.ls(type='camera'), parent=True, fullPath=True))
+                # A referenced top node keeps its name, so its copy drops the
+                # namespace; every node below keeps its exact name
+                path = '|rig|{}{}'.format(prefix, MESH)
+                self.assertEqual(
+                    set(cmds.ls(type='transform', long=True)) - cameras,
+                    {'|rig', path})
+                got = utils.get_vertex_positions(path, True)
+                for p, q in zip(got, expected):
+                    for axis in range(3):
+                        self.assertAlmostEqual(p[axis], q[axis], places=4)
 
     def test_static_mesh_warns(self):
         for world in (False, True):
